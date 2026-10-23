@@ -1,0 +1,52 @@
+name: xpander_dev
+
+services:
+  database:
+    image: postgres:18.6
+    environment:
+      POSTGRES_DB: xpander
+      POSTGRES_USER: xpander
+      POSTGRES_PASSWORD: xpander_dev_only
+    volumes:
+      - database_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - private
+
+  migrate:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.dev
+    command: ["go", "run", "./cmd/migrate"]
+    environment:
+      DATABASE_URL: postgres://xpander:xpander_dev_only@database:5432/xpander?sslmode=disable
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - private
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.dev
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://xpander:xpander_dev_only@database:5432/xpander?sslmode=disable
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - private
+
+networks:
+  private:
+
+volumes:
+  database_data:

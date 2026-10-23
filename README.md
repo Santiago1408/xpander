@@ -1,36 +1,20 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# XPANDER
 
-## Getting Started
+Tienda de ropa para Bolivia con catálogo, carrito que prepara una solicitud por WhatsApp y panel de administración para contenido, productos, inventario y pedidos.
 
-First, run the development server:
+La [definición inicial y primera entrega](docs/01-alcance-y-primer-entregable.md) recoge las decisiones aprobadas y el orden de desarrollo. Los [recursos provisionales de marca](logos/brand/USO.md) están listos para la interfaz.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Go para desarrollo local
+
+La versión oficial Go 1.27.3 para Linux x86-64 está instalada en `.tools/go/` y no se añade al repositorio. Desde la raíz del proyecto:
+
+```sh
+export PATH="$PWD/.tools/go/bin:$PATH"
+go version
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Este cambio de `PATH` dura solo en la terminal actual. En otra terminal hay que ejecutar de nuevo el `export`. Los contenedores compilan Go por su cuenta y no dependen de esta instalación local.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Entorno de desarrollo
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+La [guía del entorno local](docs/02-entorno-local.md) explica cómo arrancar PostgreSQL, aplicar las migraciones y conectar la API Go con Next.js. El [diseño del esquema](docs/03-esquema-y-migraciones.md) documenta las tablas y sus reglas. Este entorno no modifica la aplicación Cabello ni el proxy Caddy del VPS.
