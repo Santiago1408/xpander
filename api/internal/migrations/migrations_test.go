@@ -7,12 +7,24 @@ func TestLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) < 3 {
-		t.Fatalf("expected at least 3 migrations, got %d", len(files))
+	expected := []string{
+		"001_foundation.sql",
+		"002_catalog.sql",
+		"003_orders_inventory.sql",
+		"004_username_login.sql",
+		"005_landing_publications.sql",
+		"006_landing_draft.sql",
+		"007_product_revision.sql",
+	}
+	if len(files) < len(expected) {
+		t.Fatalf("expected at least %d migrations, got %d", len(expected), len(files))
 	}
 	for i, file := range files {
 		if file.version != i+1 {
 			t.Fatalf("unexpected migration version %d at position %d", file.version, i)
+		}
+		if i < len(expected) && file.name != expected[i] {
+			t.Fatalf("unexpected migration %s at position %d", file.name, i)
 		}
 		if len(file.checksum) != 64 || file.sql == "" {
 			t.Fatalf("incomplete migration %s", file.name)

@@ -8,15 +8,19 @@ Las migraciones SQL están en `api/internal/migrations/sql/`. El programa `api/c
 
 | Área | Tablas | Decisión principal |
 | --- | --- | --- |
-| Administración | `users`, `user_sessions`, `branches`, `user_branch_access` | Un propietario global y, más adelante, personal asignado a sucursales. Las sesiones guardan solo el hash del token. No hay cuenta ni contraseña predeterminadas. |
-| Contenido | `site_settings`, `media`, `pages`, `page_sections`, `page_section_media` | Ajustes globales (por ejemplo contacto y WhatsApp) y páginas con secciones ordenables, publicables y medios reutilizables. Los valores flexibles se validan por clave o tipo en la API. |
+| Administración | `users`, `user_sessions`, `branches`, `user_branch_access` | Acceso por nombre de usuario y contraseña; correo opcional y nunca identificador de inicio de sesión. Un propietario global y, más adelante, personal asignado a sucursales. Las sesiones guardan solo el hash del token. No hay cuenta ni contraseña predeterminadas. |
+| Contenido | `site_settings`, `media`, `pages`, `page_sections`, `page_section_media`, `page_publications`, `page_publication_media` | Ajustes operativos y borrador editable, más publicaciones inmutables con historial. Una sección eliminada conserva sus datos para restaurarse. Los valores flexibles se validan en la API. |
 | Catálogo | `categories`, `brands`, `attribute_definitions`, `attribute_options`, `products`, `product_option_values`, `product_variants`, `variant_option_values`, `product_media` | El administrador crea categorías y atributos. Los atributos de producto describen la prenda; los de variante distinguen combinaciones vendibles. |
 | Pedidos | `orders`, `order_items` | Recojo en tienda, identificador idempotente por solicitud y copia histórica de sucursal, producto, opciones, SKU y precio. El pedido se guarda antes de abrir WhatsApp; eso no demuestra que el mensaje se envió. |
 | Inventario | `branch_stock`, `stock_movements` | Existencia por sucursal y variante; compras con costo unitario, ajustes y salidas por venta. Los movimientos son append-only y actualizan el saldo mediante trigger. |
 
 Todos los importes son enteros en centavos de boliviano: `100` representa Bs 1,00. `price_minor` es precio de venta; `unit_cost_minor` registra el costo de cada entrada por compra. La moneda de los pedidos iniciales es únicamente `BOB`.
 
-No se crean categorías, atributos, productos, medios, sucursales ni usuarios ficticios. El inventario permanece vacío. La primera sucursal y el propietario se crearán por un proceso de inicialización seguro en una etapa posterior.
+No se crean categorías, atributos, productos, medios, sucursales ni usuarios ficticios. El inventario permanece vacío. El propietario y la primera sucursal se crean con la herramienta de inicialización; la migración `006` crea únicamente el borrador vacío de la página de inicio.
+
+La administración de categorías, marcas, atributos y opciones está implementada en el [panel de vocabulario](06-vocabulario-catalogo.md). Las [fichas y variantes](07-productos-y-catalogo.md) también se editan desde el panel y se muestran en el catálogo público cuando están activas.
+
+Las migraciones `004`, `005` y `006` incorporan el [acceso por usuario y el editor de la landing](04-editor-landing.md). La `007` añade la revisión del producto para controlar ediciones concurrentes. No se modifican archivos de migración ya aplicados.
 
 ## Reglas e invariantes
 
@@ -39,7 +43,7 @@ sudo docker compose -f compose.dev.yaml exec -T database psql -U xpander -d xpan
 sudo docker compose -f compose.dev.yaml exec -T database psql -U xpander -d xpander -c '\dt'
 ```
 
-Debes ver tres versiones aplicadas (`001_foundation.sql`, `002_catalog.sql`, `003_orders_inventory.sql`) y las tablas correspondientes. Repetir `up --build -d` no debe duplicarlas. Si el servicio `migrate` falla, consulta sus registros antes de intentar cambios manuales en la base.
+Debes ver siete versiones aplicadas (`001_foundation.sql` a `007_product_revision.sql`) y las tablas correspondientes. Repetir `up --build -d` no debe duplicarlas. Si el servicio `migrate` falla, consulta sus registros antes de intentar cambios manuales en la base.
 
 Para ejecutar explícitamente el migrador después de añadir una nueva migración:
 

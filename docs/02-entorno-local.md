@@ -26,6 +26,8 @@ npm run dev
 
 La página se abre en `http://localhost:3000`. El navegador pide `/api/*` a Next.js y Next.js reenvía esas rutas a la API Go local en `127.0.0.1:8080`. PostgreSQL, el migrador y Go están en una red privada de Compose; solo la API se publica en la interfaz de loopback. Ninguno de estos contenedores reclama los puertos públicos 80 o 443.
 
+Para crear el primer propietario y la primera sucursal, sigue la [guía de acceso administrativo](05-acceso-admin.md). Después podrás iniciar sesión en `http://localhost:3000/admin/login`.
+
 ## Comprobación
 
 ```sh
@@ -50,4 +52,4 @@ Para detener los servicios sin borrar los datos:
 sudo docker compose -f compose.dev.yaml down
 ```
 
-No uses `down -v` salvo que quieras borrar expresamente la base de datos local. La siguiente etapa será el alta segura del primer administrador y los endpoints del catálogo.
+No uses `down -v` salvo que quieras borrar expresamente la base de datos local **y las imágenes cargadas en `media_data`**. El editor de la landing está en `/admin/contenido`, el vocabulario en `/admin/catalogo/vocabulario`, las fichas en `/admin/catalogo/productos` y el catálogo público en `/catalogo`. El inventario y los pedidos quedan para etapas siguientes.

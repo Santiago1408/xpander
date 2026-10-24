@@ -18,3 +18,11 @@ Este cambio de `PATH` dura solo en la terminal actual. En otra terminal hay que 
 ## Entorno de desarrollo
 
 La [guía del entorno local](docs/02-entorno-local.md) explica cómo arrancar PostgreSQL, aplicar las migraciones y conectar la API Go con Next.js. El [diseño del esquema](docs/03-esquema-y-migraciones.md) documenta las tablas y sus reglas. Este entorno no modifica la aplicación Cabello ni el proxy Caddy del VPS.
+
+La [guía del editor de la landing](docs/04-editor-landing.md) explica cómo editar secciones, cargar imágenes, guardar un borrador y publicar una versión visible para visitantes.
+
+La [guía de acceso administrativo](docs/05-acceso-admin.md) explica cómo crear la primera cuenta y sucursal y probar `/admin` sin poner contraseñas en el repositorio.
+
+El [vocabulario del catálogo](docs/06-vocabulario-catalogo.md) ya se puede gestionar desde el panel: categorías, marcas, atributos y opciones, sin listas predefinidas.
+
+La [guía de productos](docs/07-productos-y-catalogo.md) describe cómo crear fichas y variantes, y cómo comprobar su publicación en `/catalogo`.

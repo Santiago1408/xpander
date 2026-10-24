@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -43,9 +44,34 @@ func run() error {
 	if port == "" {
 		port = "8080"
 	}
+	publicOrigin := os.Getenv("PUBLIC_ORIGIN")
+	if publicOrigin == "" {
+		return errors.New("PUBLIC_ORIGIN is required")
+	}
+	parsedOrigin, err := url.Parse(publicOrigin)
+	if err != nil || parsedOrigin.Host == "" || parsedOrigin.User != nil || parsedOrigin.Path != "" || parsedOrigin.RawQuery != "" || parsedOrigin.Fragment != "" || (parsedOrigin.Scheme != "http" && parsedOrigin.Scheme != "https") {
+		return errors.New("PUBLIC_ORIGIN must be an HTTP(S) origin without a path")
+	}
+	appEnvironment := os.Getenv("APP_ENV")
+	if appEnvironment != "development" && appEnvironment != "production" {
+		return errors.New("APP_ENV must be development or production")
+	}
+	secureCookies := appEnvironment == "production"
+	if secureCookies && parsedOrigin.Scheme != "https" {
+		return errors.New("PUBLIC_ORIGIN must use HTTPS in production")
+	}
+	mux := newHandler(pool)
+	admin := registerAdminAuth(mux, databaseAuthStore{pool: pool}, publicOrigin, secureCookies)
+	mediaDir := os.Getenv("MEDIA_DIR")
+	if mediaDir == "" {
+		return errors.New("MEDIA_DIR is required")
+	}
+	registerLandingRoutes(mux, pool, admin, mediaDir)
+	registerVocabularyRoutes(mux, pool, admin)
+	registerProductRoutes(mux, pool, admin)
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           newHandler(pool),
+		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -75,7 +101,7 @@ type databasePinger interface {
 	Ping(context.Context) error
 }
 
-func newHandler(database databasePinger) http.Handler {
+func newHandler(database databasePinger) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/live", func(w http.ResponseWriter, _ *http.Request) {
 		writeStatus(w, http.StatusOK, "ok")

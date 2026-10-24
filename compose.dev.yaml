@@ -30,15 +30,36 @@ services:
     networks:
       - private
 
+  bootstrap:
+    profiles: ["setup"]
+    build:
+      context: ./api
+      dockerfile: Dockerfile.dev
+    command: ["go", "run", "./cmd/bootstrap"]
+    environment:
+      DATABASE_URL: postgres://xpander:xpander_dev_only@database:5432/xpander?sslmode=disable
+    stdin_open: true
+    tty: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - private
+
   api:
     build:
       context: ./api
       dockerfile: Dockerfile.dev
     environment:
       PORT: "8080"
+      APP_ENV: development
+      PUBLIC_ORIGIN: http://localhost:3000
+      MEDIA_DIR: /srv/media
       DATABASE_URL: postgres://xpander:xpander_dev_only@database:5432/xpander?sslmode=disable
     ports:
       - "127.0.0.1:8080:8080"
+    volumes:
+      - media_data:/srv/media
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -50,3 +71,4 @@ networks:
 
 volumes:
   database_data:
+  media_data:

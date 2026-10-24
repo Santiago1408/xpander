@@ -38,7 +38,7 @@ La primera entrega local debe atravesar las tres capas sin esperar a que esté l
 3. Crear una categoría, una marca, un producto y una variante desde el panel.
 4. Ver el producto y su precio en el catálogo público.
 
-Puede usar una imagen provisional y datos de prueba. No requiere mercadería real ni publicar el sitio en el VPS. Después se implementarán, en este orden, movimientos de inventario; carrito y pedidos por WhatsApp; edición de la landing y galería; y despliegue.
+Puede usar una imagen provisional y datos de prueba. No requiere mercadería real ni publicar el sitio en el VPS. El acceso administrativo, la edición de la landing, el vocabulario, las fichas de productos y variantes y su vista pública ya están implementados. Falta comprobar este flujo completo contra PostgreSQL en el entorno local. Luego seguirán los movimientos de inventario, el carrito y los pedidos por WhatsApp, y el despliegue.
 
 El flujo de pedidos se verificará con nombre y teléfono del cliente, número de pedido, persistencia incluso si WhatsApp se cierra, confirmación o cancelación en el panel y descuento transaccional de existencias al confirmar.
 
