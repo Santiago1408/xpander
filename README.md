@@ -30,4 +30,6 @@ La [guía de productos](docs/07-productos-y-catalogo.md) describe cómo crear fi
 El [banco de imágenes y la papelera](docs/08-identificadores-y-papelera.md) permiten reutilizar imágenes y restaurar elementos retirados del panel.
 El [inventario inicial y la evaluación del QR](docs/09-inventario-y-qr.md) describen la carga por variante y las condiciones para añadir pagos manuales.
 
+El [carrito y los pedidos por WhatsApp](docs/11-carrito-y-pedidos.md) explican cómo registrar y confirmar solicitudes sin pasarela de pago.
+
 Para empezar las pruebas con catálogo, pedidos, contenido e imágenes vacíos conservando la cuenta y las sucursales, sigue el [reinicio de datos de prueba](docs/10-reinicio-datos-prueba.md).

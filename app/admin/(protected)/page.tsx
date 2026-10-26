@@ -7,8 +7,7 @@ export default function AdminHomePage() {
       <h1 className="mt-2 text-3xl font-semibold">Panel de XPANDER</h1>
       <p className="mt-4 max-w-2xl leading-7 text-zinc-600">
         Ya puedes editar y publicar la landing, registrar productos con sus tallas,
-        precios e inventario inicial, y registrar movimientos posteriores.
-        Los pedidos se incorporarán en la próxima etapa.
+        precios e inventario inicial, registrar movimientos posteriores y confirmar pedidos.
       </p>
       <div className="mt-7 flex flex-wrap gap-3">
         <Link className="inline-block rounded-lg bg-zinc-950 px-5 py-3 font-medium text-white"
@@ -23,6 +22,8 @@ export default function AdminHomePage() {
           href="/admin/papelera">Papelera</Link>
         <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
           href="/admin/inventario">Inventario</Link>
+        <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
+          href="/admin/pedidos">Pedidos</Link>
       </div>
     </section>
   );

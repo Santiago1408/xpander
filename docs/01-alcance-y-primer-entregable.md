@@ -6,7 +6,7 @@
 - Moneda: bolivianos (BOB). Los importes se almacenarán como unidades menores enteras o como `numeric` en PostgreSQL, nunca como flotantes binarios.
 - Entrega: recojo por el cliente en la tienda. Los envíos, si existen, se coordinan fuera del sistema.
 - Carrito: el servidor valida productos, variantes, cantidades, precios y disponibilidad; guarda la solicitud y devuelve un número de pedido antes de abrir WhatsApp al 59170782380.
-- Estados iniciales de pedido: pendiente, confirmado y cancelado. Abrir WhatsApp no prueba que el mensaje se haya enviado.
+- Estados operativos iniciales de pedido: pendiente y confirmado. Abrir WhatsApp no prueba que el mensaje se haya enviado.
 - El panel permite administrar todo el contenido de secciones predefinidas de la landing, incluidas imágenes; también ordenarlas, ocultarlas y publicarlas.
 - Inventario inicialmente vacío. Un administrador al comienzo, con modelo preparado para más usuarios y sucursales.
 - Las marcas se administran en el panel. Estilo, público y color son textos de cada producto; cada variante tiene talla alfabética, numérica o ambas.
@@ -38,9 +38,9 @@ La primera entrega local debe atravesar las tres capas sin esperar a que esté l
 3. Crear una marca, un producto y una variante desde el panel.
 4. Ver el producto y su precio en el catálogo público.
 
-Puede usar una imagen provisional y datos de prueba. No requiere mercadería real ni publicar el sitio en el VPS. El acceso administrativo, la edición de la landing, las marcas, las fichas, el inventario y la vista pública están implementados. Falta comprobar este flujo completo contra PostgreSQL en el entorno local. El carrito y los pedidos por WhatsApp quedan para una etapa posterior.
+Puede usar una imagen provisional y datos de prueba. No requiere mercadería real ni publicar el sitio en el VPS. El acceso administrativo, la edición de la landing, las marcas, las fichas, el inventario, el carrito y los pedidos están implementados. Falta comprobar el flujo completo contra PostgreSQL en el entorno local.
 
-El flujo de pedidos se verificará con nombre y teléfono del cliente, número de pedido, persistencia incluso si WhatsApp se cierra, confirmación o cancelación en el panel y descuento transaccional de existencias al confirmar.
+El flujo de pedidos se verificará con nombre y teléfono del cliente, número de pedido, persistencia incluso si WhatsApp se cierra, confirmación en el panel y descuento transaccional de existencias al confirmar.
 
 ## Datos que se completarán antes de publicar
 

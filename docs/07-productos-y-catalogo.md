@@ -18,7 +18,7 @@ Las imágenes pueden subirse desde la ficha o elegirse del banco; la primera es 
 
 ## Vista pública y pruebas
 
-`/catalogo` muestra fichas activas fuera de la papelera con alguna variante activa. Presenta nombre, descripción, estilo, público, color, marca, tallas, códigos, imágenes y precios en bolivianos. Todavía no muestra existencias ni permite generar pedidos.
+`/catalogo` muestra fichas activas fuera de la papelera con alguna variante activa. Presenta nombre, descripción, estilo, público, color, marca, tallas, códigos, imágenes y precios en bolivianos. Permite agregar variantes al carrito y registrar pedidos para recojo en tienda. La disponibilidad se comprueba al registrar el pedido y de nuevo al confirmarlo; no se publica el saldo exacto. Consulta el [flujo de pedidos](11-carrito-y-pedidos.md).
 
 Para verificar el flujo local:
 

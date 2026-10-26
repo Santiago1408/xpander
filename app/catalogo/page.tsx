@@ -1,32 +1,12 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { Suspense } from "react";
+import CatalogShop, { type CatalogProduct } from "./catalog-shop";
 
 export const metadata: Metadata = {
   title: "Catálogo | XPANDER",
   description: "Conoce las prendas y variantes de XPANDER en Bolivia.",
 };
-
-type CatalogProduct = {
-  id: number;
-  code: string;
-  name: string;
-  description: string;
-  style: string;
-  audience: string;
-  color: string;
-  brandName: string;
-  isFeatured: boolean;
-  variants: { id: number; code: string; sizeAlpha: string; sizeNumeric: string;
-    priceMinor: number; compareAtPriceMinor: number | null }[];
-  media: { id: number; url: string; altText: string }[];
-};
-
-function money(minor: number): string {
-  const whole = Math.floor(minor / 100).toLocaleString("es-BO");
-  return `Bs ${whole},${String(minor % 100).padStart(2, "0")}`;
-}
 
 async function ProductGrid() {
   const apiOrigin = process.env.XPANDER_API_ORIGIN ?? "http://127.0.0.1:8080";
@@ -43,44 +23,7 @@ async function ProductGrid() {
       Aún no hay productos publicados. Vuelve pronto para conocer las novedades.
     </p>;
   }
-  return (
-    <div className="grid gap-7 md:grid-cols-2 xl:grid-cols-3">
-      {products.map((product) => {
-        const prices = product.variants.map((variant) => variant.priceMinor);
-        const lowest = Math.min(...prices);
-        return <article className="overflow-hidden rounded-2xl border border-zinc-200 bg-white" key={product.id}>
-          {product.media[0] ? <Image alt={product.media[0].altText} className="aspect-[4/3] w-full object-cover"
-            height={600} src={product.media[0].url} unoptimized width={800} /> :
-            <div className="flex aspect-[4/3] items-center justify-center bg-zinc-100 text-sm tracking-[0.25em] text-zinc-400">
-              XPANDER
-            </div>}
-          <div className="p-5">
-            <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
-              {product.style && <span>{product.style}</span>}
-              {product.audience && <span>· {product.audience}</span>}
-              {product.color && <span>· {product.color}</span>}
-              {product.brandName && <span>· {product.brandName}</span>}
-              {product.isFeatured && <span className="rounded-full bg-zinc-950 px-2 py-1 text-white">Destacado</span>}
-            </div>
-            <h2 className="mt-3 text-xl font-semibold">{product.name}</h2>
-            <p className="mt-1 text-xs text-zinc-500">Código {product.code}</p>
-            {product.description && <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm text-zinc-600">{product.description}</p>}
-            <p className="mt-5 text-lg font-semibold">{prices.length > 1 ? "Desde " : ""}{money(lowest)}</p>
-            <ul className="mt-4 space-y-1 text-sm text-zinc-600">
-              {product.variants.map((variant) => <li className="flex justify-between gap-3" key={variant.id}>
-                <span>{[variant.sizeAlpha, variant.sizeNumeric].filter(Boolean).join(" / ")} · {variant.code}</span>
-                <span className="text-right">
-                  {variant.compareAtPriceMinor !== null && <span className="mr-2 text-zinc-400 line-through">{money(variant.compareAtPriceMinor)}</span>}
-                  {money(variant.priceMinor)}
-                </span>
-              </li>)}
-            </ul>
-            <p className="mt-4 text-xs text-zinc-500">Disponibilidad sujeta a confirmación en tienda.</p>
-          </div>
-        </article>;
-      })}
-    </div>
-  );
+  return <CatalogShop products={products} />;
 }
 
 export default function CatalogPage() {
@@ -94,7 +37,7 @@ export default function CatalogPage() {
         <div className="py-12">
           <p className="text-sm font-medium uppercase tracking-[0.25em] text-zinc-500">Ropa casual y deportiva</p>
           <h1 className="mt-3 text-4xl font-semibold md:text-5xl">Catálogo</h1>
-          <p className="mt-4 max-w-2xl text-zinc-600">Explora nuestras prendas y sus variantes disponibles para consulta.</p>
+          <p className="mt-4 max-w-2xl text-zinc-600">Elige tus prendas y solicita el recojo en tienda. El pedido queda registrado antes de abrir WhatsApp.</p>
         </div>
         <Suspense fallback={<p className="text-zinc-600">Cargando productos…</p>}>
           <ProductGrid />

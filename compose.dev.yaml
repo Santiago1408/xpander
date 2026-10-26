@@ -55,6 +55,7 @@ services:
       APP_ENV: development
       PUBLIC_ORIGIN: http://localhost:3000
       MEDIA_DIR: /srv/media
+      ORDER_WHATSAPP_NUMBER: "59170782380"
       DATABASE_URL: postgres://xpander:xpander_dev_only@database:5432/xpander?sslmode=disable
     ports:
       - "127.0.0.1:8080:8080"

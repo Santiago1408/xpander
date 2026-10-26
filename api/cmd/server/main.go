@@ -72,6 +72,14 @@ func run() error {
 	registerQuickCatalogRoutes(mux, pool, admin)
 	registerTrashRoutes(mux, pool, admin, mediaDir)
 	registerInventoryRoutes(mux, pool, admin)
+	whatsAppNumber := os.Getenv("ORDER_WHATSAPP_NUMBER")
+	if whatsAppNumber == "" {
+		whatsAppNumber = "59170782380"
+	}
+	if !validWhatsAppNumber(whatsAppNumber) {
+		return errors.New("ORDER_WHATSAPP_NUMBER must contain 8 to 15 digits with country code")
+	}
+	registerOrderRoutes(mux, pool, admin, whatsAppNumber)
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           mux,

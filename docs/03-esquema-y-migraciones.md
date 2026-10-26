@@ -20,14 +20,14 @@ No se crean marcas, productos, medios, sucursales ni usuarios ficticios. El inve
 
 Las [fichas y variantes](07-productos-y-catalogo.md) se registran desde una sola pantalla. Las [marcas](06-marcas-y-tallas.md) tienen un apartado propio.
 
-Las migraciones `004`, `005` y `006` incorporan el [acceso por usuario y el editor de la landing](04-editor-landing.md). La `007` añade la revisión del producto; la `008`, la papelera restaurable; la `009`, la clave de solicitud del inventario; la `010`, los códigos numéricos; y la `011`, la simplificación del catálogo y los dos campos de talla. No se modifican migraciones aplicadas. La limpieza de datos de prueba se ejecuta [por separado](10-reinicio-datos-prueba.md).
+Las migraciones `004`, `005` y `006` incorporan el [acceso por usuario y el editor de la landing](04-editor-landing.md). La `007` añade la revisión del producto; la `008`, la papelera restaurable; la `009`, la clave de solicitud del inventario; la `010`, los códigos numéricos; la `011`, la simplificación del catálogo y los dos campos de talla; la `012`, la huella de la solicitud de pedido y el usuario que confirma; y la `013`, corrige las salidas de stock. No se modifican migraciones aplicadas. La limpieza de datos de prueba se ejecuta [por separado](10-reinicio-datos-prueba.md).
 
 ## Reglas e invariantes
 
 - Un producto puede estar en borrador, activo o archivado. Tiene código de cuatro dígitos y cada variante uno de seis. Se conserva un SKU interno para referencias históricas; el administrador usa los códigos numéricos.
 - Toda variante necesita talla alfabética, numérica o ambas. La API impide repetir una talla del mismo sistema dentro de un producto y valida las entradas de stock por sucursal.
 - Las existencias no pueden ser negativas. Cada inserción en `stock_movements` actualiza `branch_stock` en la misma transacción; un saldo negativo rechaza toda la inserción. No se deben editar directamente saldos ni movimientos: para corregirlos se registra un ajuste.
-- Los pedidos admiten `pending`, `confirmed` y `cancelled`. La API solo permitirá pasar de pendiente a confirmado o cancelado. Al confirmar, validará y descontará existencias en una transacción; la base impide saldos negativos y una segunda salida para el mismo ítem, pero la transición y la suma total del pedido son reglas de aplicación.
+- El flujo actual usa `pending` y `confirmed`; el esquema conserva `cancelled` para compatibilidad, sin acción de cancelación en el panel. Al confirmar, la API descuenta existencias en una transacción; la base impide saldos negativos y una segunda salida para el mismo ítem.
 - `client_request_id` evita duplicar un pedido cuando el cliente reintenta la solicitud. Los datos históricos del pedido no cambian si luego se editan sucursal, catálogo o precio.
 - La papelera permite retirar productos, variantes, imágenes y secciones. El borrado definitivo se bloquea cuando rompería pedidos, inventario u otras referencias históricas. Las marcas se eliminan desde su propio apartado, con aviso si están asociadas a productos.
 - `updated_at` se actualizará desde la API en cada modificación. La base establece el valor inicial, no lo cambia automáticamente.
@@ -43,7 +43,7 @@ sudo docker compose -f compose.dev.yaml exec -T database psql -U xpander -d xpan
 sudo docker compose -f compose.dev.yaml exec -T database psql -U xpander -d xpander -c '\dt'
 ```
 
-Debes ver once versiones aplicadas (`001_foundation.sql` a `011_catalog_simplification.sql`) y las tablas correspondientes. Repetir `up --build -d` no debe duplicarlas. Si el servicio `migrate` falla, consulta sus registros antes de intentar cambios manuales en la base.
+Debes ver trece versiones aplicadas (`001_foundation.sql` a `013_stock_outflow.sql`) y las tablas correspondientes. Repetir `up --build -d` no debe duplicarlas. Si el servicio `migrate` falla, consulta sus registros antes de intentar cambios manuales en la base.
 
 Para ejecutar explícitamente el migrador después de añadir una nueva migración:
 

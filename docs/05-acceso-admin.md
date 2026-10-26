@@ -4,7 +4,7 @@ El panel se abre en `/admin/login` y utiliza nombre de usuario y contraseña. El
 
 ## Crear la primera cuenta y sucursal
 
-Desde la raíz del repositorio, con las migraciones `001` a `005` aplicadas:
+Desde la raíz del repositorio, Compose aplicará todas las migraciones pendientes antes de arrancar la API:
 
 ```sh
 sudo docker compose -f compose.dev.yaml up --build -d
@@ -27,6 +27,6 @@ Visita `http://localhost:3000/admin/login`, entra con el nombre de usuario elegi
 - Las operaciones de inicio y cierre de sesión aceptan únicamente el `Origin` configurado en `PUBLIC_ORIGIN`. En el Compose local es `http://localhost:3000`; usa exactamente esa dirección en el navegador.
 - Hay un límite básico de intentos por usuario y dirección de origen dentro del proceso. Para producción también se necesitarán límites en el proxy y pruebas con su configuración real.
 - No existe todavía recuperación automática de contraseña ni administración de múltiples cuentas; se implementarán antes de usar el panel con más personas. No borres el volumen de PostgreSQL para recuperar acceso.
-- El panel muestra por ahora una pantalla inicial. Los módulos de contenido, catálogo, inventario y pedidos siguen pendientes.
+- El panel incluye contenido, catálogo, inventario y pedidos. El flujo completo de pedidos requiere una prueba local con PostgreSQL antes de preparar producción.
 
 Al preparar producción, la API deberá configurarse con `APP_ENV=production` y `PUBLIC_ORIGIN=https://xpander.duckdns.org` detrás del Caddy público. Esa configuración no se ha aplicado todavía en el VPS.
