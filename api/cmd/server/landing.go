@@ -92,6 +92,9 @@ func registerLandingRoutes(mux *http.ServeMux, pool *pgxpool.Pool, admin *adminA
 	mux.HandleFunc("POST /api/admin/landing/publish", service.publish)
 	mux.HandleFunc("GET /api/admin/landing/publications", service.publications)
 	mux.HandleFunc("POST /api/admin/media", service.uploadMedia)
+	mux.HandleFunc("GET /api/admin/media", service.listMedia)
+	mux.HandleFunc("DELETE /api/admin/media/{id}", service.trashMedia)
+	mux.HandleFunc("POST /api/admin/media/{id}/restore", service.restoreMedia)
 	mux.HandleFunc("GET /api/admin/media/{id}", service.serveAdminMedia)
 	mux.HandleFunc("GET /api/media/{id}", service.serveMedia)
 }

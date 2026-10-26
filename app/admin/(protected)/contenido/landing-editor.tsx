@@ -20,6 +20,7 @@ type Draft = {
 };
 
 type Publication = { version: number; publishedAt: string; username: string };
+type LibraryMedia = LandingMedia & { isDeleted: boolean };
 
 const sectionTypes = [
   { value: "hero", label: "Portada" },
@@ -36,19 +37,23 @@ export default function LandingEditor() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [altTexts, setAltTexts] = useState<Record<string, string>>({});
+  const [library, setLibrary] = useState<LibraryMedia[]>([]);
+  const [selectedMedia, setSelectedMedia] = useState<Record<string, number>>({});
 
   useEffect(() => {
     async function load() {
       try {
-        const [draftResponse, historyResponse] = await Promise.all([
+        const [draftResponse, historyResponse, mediaResponse] = await Promise.all([
           fetch("/api/admin/landing", { cache: "no-store" }),
           fetch("/api/admin/landing/publications", { cache: "no-store" }),
+          fetch("/api/admin/media", { cache: "no-store" }),
         ]);
-        if (!draftResponse.ok || !historyResponse.ok) {
+        if (!draftResponse.ok || !historyResponse.ok || !mediaResponse.ok) {
           throw new Error("No se pudo cargar el editor.");
         }
         setDraft((await draftResponse.json()) as Draft);
         setHistory((await historyResponse.json()) as Publication[]);
+        setLibrary((await mediaResponse.json()) as LibraryMedia[]);
       } catch {
         setError("No se pudo cargar el editor. Comprueba que la API esté activa.");
       }
@@ -191,6 +196,8 @@ export default function LandingEditor() {
       if (!response.ok) throw new Error("No se pudo subir la imagen. Usa PNG/JPEG de hasta 8 MB.");
       const media = (await response.json()) as LandingMedia;
       changeSection(index, { media: [...draft.sections[index].media, media] });
+      const mediaResponse = await fetch("/api/admin/media", { cache: "no-store" });
+      if (mediaResponse.ok) setLibrary((await mediaResponse.json()) as LibraryMedia[]);
       setNotice("Imagen subida. Guarda el borrador para asociarla a la sección.");
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "No se pudo subir la imagen.");
@@ -223,9 +230,9 @@ export default function LandingEditor() {
         <h2 className="text-xl font-semibold">Datos de la página</h2>
         <div className="mt-5 grid gap-5 md:grid-cols-2">
           <label className="text-sm font-medium">
-            Título de la página
+            Título de la página *
             <input className="mt-2 w-full rounded-lg border border-zinc-300 p-3" maxLength={180}
-              onChange={(event) => changePage("title", event.target.value)} value={draft.title} />
+              onChange={(event) => changePage("title", event.target.value)} required value={draft.title} />
           </label>
           <label className="text-sm font-medium">
             Título para buscadores
@@ -311,6 +318,22 @@ export default function LandingEditor() {
                       event.target.value = "";
                     }} type="file" />
                 </label>
+                <label className="text-sm font-medium">Elegir del banco
+                  <select className="mt-2 block rounded-lg border border-zinc-300 p-2"
+                    onChange={(event) => setSelectedMedia((current) => ({ ...current, [section.key]: Number(event.target.value) }))}
+                    value={selectedMedia[section.key] || 0}>
+                    <option value={0}>Selecciona una imagen</option>
+                    {library.filter((item) => !item.isDeleted && !section.media.some((used) => used.id === item.id)).map((item) =>
+                      <option key={item.id} value={item.id}>{item.altText || `Imagen ${item.id}`}</option>)}
+                  </select>
+                </label>
+                <button className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+                  disabled={!selectedMedia[section.key] || section.media.length >= 12}
+                  onClick={() => {
+                    const item = library.find((media) => media.id === selectedMedia[section.key] && !media.isDeleted);
+                    if (item) changeSection(index, { media: [...section.media, item] });
+                    setSelectedMedia((current) => ({ ...current, [section.key]: 0 }));
+                  }} type="button">Agregar imagen</button>
               </div>
             </div>
           </article>

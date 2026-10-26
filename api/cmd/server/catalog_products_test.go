@@ -11,9 +11,19 @@ func TestProductValidationAndOptionSignature(t *testing.T) {
 		t.Fatalf("valid product rejected: %v", err)
 	}
 	input.Variants[0].PriceMinor = 0
-	if err := validateProductInput(input); err == nil {
+	if err := validateVisibleVariants(input, nil); err == nil {
 		t.Fatal("active product accepted a zero-price active variant")
 	}
+	input.Variants[0].ID = 7
+	if err := validateVisibleVariants(input, map[int64]productVariant{7: {IsDeleted: true}}); err == nil {
+		t.Fatal("active product accepted only a deleted variant")
+	}
+	input.Variants = append(input.Variants, productVariant{PriceMinor: 12000, IsActive: true})
+	if err := validateVisibleVariants(input, map[int64]productVariant{7: {IsDeleted: true}}); err != nil {
+		t.Fatalf("deleted zero-price variant prevented a valid sale: %v", err)
+	}
+	input.Variants = input.Variants[:1]
+	input.Variants[0].ID = 0
 	input.Variants[0].PriceMinor = 12000
 	options := map[int64]optionInfo{
 		8:  {definitionID: 2, scope: "variant", active: true},

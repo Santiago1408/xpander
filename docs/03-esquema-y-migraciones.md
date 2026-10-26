@@ -20,11 +20,11 @@ No se crean categorías, atributos, productos, medios, sucursales ni usuarios fi
 
 La administración de categorías, marcas, atributos y opciones está implementada en el [panel de vocabulario](06-vocabulario-catalogo.md). Las [fichas y variantes](07-productos-y-catalogo.md) también se editan desde el panel y se muestran en el catálogo público cuando están activas.
 
-Las migraciones `004`, `005` y `006` incorporan el [acceso por usuario y el editor de la landing](04-editor-landing.md). La `007` añade la revisión del producto para controlar ediciones concurrentes. No se modifican archivos de migración ya aplicados.
+Las migraciones `004`, `005` y `006` incorporan el [acceso por usuario y el editor de la landing](04-editor-landing.md). La `007` añade la revisión del producto para controlar ediciones concurrentes; la `008` añade la papelera restaurable. No se modifican archivos de migración ya aplicados.
 
 ## Reglas e invariantes
 
-- Un producto puede estar en borrador, activo o archivado. Una variante tiene SKU único y una `option_signature` única dentro de su producto. La API deberá construir esa firma de forma canónica a partir de las opciones de variante; la base no compara automáticamente firma y filas de `variant_option_values`.
+- Un producto puede estar en borrador, activo o archivado. Una variante tiene SKU único y una `option_signature` única entre las variantes fuera de la papelera de su producto. La API construye esa firma de forma canónica a partir de las opciones de variante; la base no compara automáticamente firma y filas de `variant_option_values`.
 - Las opciones deben pertenecer a la definición de atributo indicada; una clave foránea compuesta lo exige. La API validará además que un atributo de alcance `product` se use en productos y uno de alcance `variant` en variantes, y evitará cambiar el alcance cuando ya tenga valores.
 - Las existencias no pueden ser negativas. Cada inserción en `stock_movements` actualiza `branch_stock` en la misma transacción; un saldo negativo rechaza toda la inserción. No se deben editar directamente saldos ni movimientos: para corregirlos se registra un ajuste.
 - Los pedidos admiten `pending`, `confirmed` y `cancelled`. La API solo permitirá pasar de pendiente a confirmado o cancelado. Al confirmar, validará y descontará existencias en una transacción; la base impide saldos negativos y una segunda salida para el mismo ítem, pero la transición y la suma total del pedido son reglas de aplicación.
@@ -43,7 +43,7 @@ sudo docker compose -f compose.dev.yaml exec -T database psql -U xpander -d xpan
 sudo docker compose -f compose.dev.yaml exec -T database psql -U xpander -d xpander -c '\dt'
 ```
 
-Debes ver siete versiones aplicadas (`001_foundation.sql` a `007_product_revision.sql`) y las tablas correspondientes. Repetir `up --build -d` no debe duplicarlas. Si el servicio `migrate` falla, consulta sus registros antes de intentar cambios manuales en la base.
+Debes ver ocho versiones aplicadas (`001_foundation.sql` a `008_recycle_bin.sql`) y las tablas correspondientes. Repetir `up --build -d` no debe duplicarlas. Si el servicio `migrate` falla, consulta sus registros antes de intentar cambios manuales en la base.
 
 Para ejecutar explícitamente el migrador después de añadir una nueva migración:
 

@@ -3,27 +3,29 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
+import { identifierFromName } from "../../../identifier";
 
-type Option = { id: number; value: string; isActive: boolean };
-type Attribute = { id: number; name: string; scope: "product" | "variant"; isActive: boolean; options: Option[] };
+type Option = { id: number; value: string; isActive: boolean; isDeleted: boolean };
+type Attribute = { id: number; name: string; scope: "product" | "variant"; isActive: boolean; isDeleted: boolean; options: Option[] };
 type Vocabulary = {
-  categories: { id: number; name: string; isActive: boolean }[];
-  brands: { id: number; name: string; isActive: boolean }[];
+  categories: { id: number; name: string; isActive: boolean; isDeleted: boolean }[];
+  brands: { id: number; name: string; isActive: boolean; isDeleted: boolean }[];
   attributes: Attribute[];
 };
 type Media = { id: number; url: string; altText: string };
+type LibraryMedia = Media & { isDeleted: boolean };
 type APITypeVariant = {
   id: number; sku: string; priceMinor: number; compareAtPriceMinor: number | null;
-  isActive: boolean; optionIds: number[];
+  isActive: boolean; isDeleted: boolean; optionIds: number[];
 };
 type APIProduct = {
   id: number; revision: number; slug: string; name: string; description: string;
   categoryId: number; brandId: number; status: "draft" | "active" | "archived";
-  isFeatured: boolean; productOptionIds: number[]; variants: APITypeVariant[]; media: Media[];
+  isFeatured: boolean; isDeleted: boolean; productOptionIds: number[]; variants: APITypeVariant[]; media: Media[];
 };
 type DraftVariant = {
   key: string; id: number; sku: string; priceText: string; compareText: string;
-  isActive: boolean; optionIds: number[];
+  isActive: boolean; isDeleted: boolean; optionIds: number[];
 };
 type DraftProduct = Omit<APIProduct, "variants"> & { variants: DraftVariant[] };
 
@@ -42,13 +44,13 @@ function parseBOB(value: string): number | null {
 }
 
 function blankVariant(): DraftVariant {
-  return { key: crypto.randomUUID(), id: 0, sku: "", priceText: "", compareText: "", isActive: true, optionIds: [] };
+  return { key: crypto.randomUUID(), id: 0, sku: "", priceText: "", compareText: "", isActive: true, isDeleted: false, optionIds: [] };
 }
 
 function blankProduct(): DraftProduct {
   return {
     id: 0, revision: 0, slug: "", name: "", description: "", categoryId: 0, brandId: 0,
-    status: "draft", isFeatured: false, productOptionIds: [], variants: [blankVariant()], media: [],
+    status: "draft", isFeatured: false, isDeleted: false, productOptionIds: [], variants: [blankVariant()], media: [],
   };
 }
 
@@ -61,19 +63,22 @@ function toDraft(product: APIProduct): DraftProduct {
       key: String(variant.id), id: variant.id, sku: variant.sku,
       priceText: minorToInput(variant.priceMinor),
       compareText: variant.compareAtPriceMinor === null ? "" : minorToInput(variant.compareAtPriceMinor),
-      isActive: variant.isActive, optionIds: [...variant.optionIds],
+      isActive: variant.isActive, isDeleted: variant.isDeleted, optionIds: [...variant.optionIds],
     })),
   };
 }
 
 function optionsForAttribute(attribute: Attribute, selected: number) {
-  return attribute.options.filter((option) => option.isActive || option.id === selected);
+  return attribute.options.filter((option) => (option.isActive && !option.isDeleted) || option.id === selected);
 }
 
 export default function ProductsEditor() {
   const [vocabulary, setVocabulary] = useState<Vocabulary | null>(null);
   const [products, setProducts] = useState<APIProduct[]>([]);
+  const [library, setLibrary] = useState<LibraryMedia[]>([]);
+  const [selectedMediaID, setSelectedMediaID] = useState(0);
   const [draft, setDraft] = useState<DraftProduct | null>(null);
+  const [identifierEdited, setIdentifierEdited] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -82,13 +87,15 @@ export default function ProductsEditor() {
   useEffect(() => {
     async function load() {
       try {
-        const [vocabularyResponse, productsResponse] = await Promise.all([
+        const [vocabularyResponse, productsResponse, mediaResponse] = await Promise.all([
           fetch("/api/admin/catalog/vocabulary", { cache: "no-store" }),
           fetch("/api/admin/catalog/products", { cache: "no-store" }),
+          fetch("/api/admin/media", { cache: "no-store" }),
         ]);
-        if (!vocabularyResponse.ok || !productsResponse.ok) throw new Error("No se pudo cargar el catálogo.");
+        if (!vocabularyResponse.ok || !productsResponse.ok || !mediaResponse.ok) throw new Error("No se pudo cargar el catálogo.");
         setVocabulary((await vocabularyResponse.json()) as Vocabulary);
         setProducts((await productsResponse.json()) as APIProduct[]);
+        setLibrary((await mediaResponse.json()) as LibraryMedia[]);
       } catch (failure) {
         setError(failure instanceof Error ? failure.message : "No se pudo cargar el catálogo.");
       }
@@ -139,7 +146,7 @@ export default function ProductsEditor() {
         method: draft.id ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          revision: draft.revision, slug: draft.slug, name: draft.name,
+          revision: draft.revision, slug: draft.id === 0 && !identifierEdited ? "" : draft.slug, name: draft.name,
           description: draft.description, categoryId: draft.categoryId, brandId: draft.brandId,
           status: draft.status, isFeatured: draft.isFeatured,
           productOptionIds: draft.productOptionIds, variants,
@@ -157,6 +164,7 @@ export default function ProductsEditor() {
       setProducts(list);
       const current = list.find((product) => product.id === saved.id);
       if (current) setDraft(toDraft(current));
+      setIdentifierEdited(true);
       setNotice("Producto guardado. Los visitantes solo ven fichas con estado Activo.");
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "No se pudo guardar.");
@@ -176,6 +184,8 @@ export default function ProductsEditor() {
       if (!response.ok) throw new Error("No se pudo subir la imagen. Usa PNG/JPEG de hasta 8 MB.");
       const media = (await response.json()) as Media;
       changeProduct({ media: [...draft.media, media] });
+      const mediaResponse = await fetch("/api/admin/media", { cache: "no-store" });
+      if (mediaResponse.ok) setLibrary((await mediaResponse.json()) as LibraryMedia[]);
       setAltText("");
       setNotice("Imagen cargada. Guarda la ficha para asociarla al producto.");
     } catch (failure) {
@@ -185,27 +195,47 @@ export default function ProductsEditor() {
     }
   }
 
+  async function changeTrash(path: string, method: "DELETE" | "POST", productID: number) {
+    if (busy) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const response = await fetch(path, { method });
+      if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo cambiar la papelera.");
+      const listResponse = await fetch("/api/admin/catalog/products", { cache: "no-store" });
+      if (!listResponse.ok) throw new Error("Cambio guardado. Recarga el panel para actualizar la lista.");
+      const list = (await listResponse.json()) as APIProduct[];
+      setProducts(list);
+      const current = list.find((product) => product.id === productID);
+      if (current) setDraft(toDraft(current));
+      setNotice(method === "DELETE" ? "Elemento enviado a la papelera." : "Elemento restaurado con su estado anterior.");
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "No se pudo completar la acción.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!vocabulary) return <p className="text-zinc-600">{error || "Cargando productos…"}</p>;
 
   const productAttributes = vocabulary.attributes.filter((attribute) =>
-    attribute.scope === "product" && (attribute.isActive || draft?.productOptionIds.some((id) => attribute.options.some((option) => option.id === id))));
+    attribute.scope === "product" && ((attribute.isActive && !attribute.isDeleted) || draft?.productOptionIds.some((id) => attribute.options.some((option) => option.id === id))));
   const variantAttributes = vocabulary.attributes.filter((attribute) =>
-    attribute.scope === "variant" && (attribute.isActive || draft?.variants.some((variant) =>
+    attribute.scope === "variant" && ((attribute.isActive && !attribute.isDeleted) || draft?.variants.some((variant) =>
       variant.optionIds.some((id) => attribute.options.some((option) => option.id === id)))));
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <button className={buttonClass} disabled={busy} onClick={() => { setDraft(blankProduct()); setError(""); setNotice(""); }} type="button">
+        <button className={buttonClass} disabled={busy} onClick={() => { setDraft(blankProduct()); setIdentifierEdited(false); setError(""); setNotice(""); }} type="button">
           + Nuevo producto
         </button>
         <select aria-label="Editar producto" className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm"
           disabled={busy} onChange={(event) => {
             const item = products.find((product) => product.id === Number(event.target.value));
-            setDraft(item ? toDraft(item) : null); setError(""); setNotice("");
+            setDraft(item ? toDraft(item) : null); setIdentifierEdited(true); setError(""); setNotice("");
           }} value={draft?.id || 0}>
           <option value={0}>Selecciona un producto para editar</option>
-          {products.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.status}</option>)}
+          {products.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.isDeleted ? "papelera" : item.status}</option>)}
         </select>
         <Link className="text-sm underline" href="/admin/catalogo/vocabulario">Editar categorías y atributos</Link>
         <Link className="text-sm underline" href="/catalogo" target="_blank">Ver catálogo público</Link>
@@ -216,36 +246,40 @@ export default function ProductsEditor() {
         {products.length === 0 ? "Todavía no hay productos. Crea el primero." : "Selecciona una ficha o crea un producto."}
       </p> : (
         <form className="space-y-6" onSubmit={(event) => void save(event)}>
-          <fieldset className="space-y-6" disabled={busy}>
+          <fieldset className="space-y-6" disabled={busy || draft.isDeleted}>
             <section className="rounded-xl border border-zinc-200 bg-white p-6">
               <h2 className="text-xl font-semibold">Ficha</h2>
               <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <label className="text-sm">Nombre
-                  <input className={inputClass} maxLength={120} onChange={(event) => changeProduct({ name: event.target.value })}
+                <label className="text-sm">Nombre *
+                  <input className={inputClass} maxLength={120} onChange={(event) => changeProduct({
+                    name: event.target.value,
+                    slug: draft.id === 0 && !identifierEdited
+                      ? (event.target.value ? identifierFromName(event.target.value) : "") : draft.slug,
+                  })}
                     required value={draft.name} />
                 </label>
-                <label className="text-sm">Identificador de URL {draft.id > 0 && "(fijo)"}
-                  <input className={inputClass} disabled={draft.id > 0} maxLength={64} minLength={2}
-                    onChange={(event) => changeProduct({ slug: event.target.value })}
-                    pattern="[a-z][a-z0-9_-]+" placeholder="polera-casual" required value={draft.slug} />
+                <label className="text-sm">Identificador{draft.id > 0 ? " *" : " (generado desde el nombre)"}
+                  <input className={inputClass} maxLength={64} minLength={2}
+                    onChange={(event) => { setIdentifierEdited(true); changeProduct({ slug: event.target.value }); }}
+                    pattern="[a-z][a-z0-9_-]+" placeholder="polera-casual" required={draft.id > 0} value={draft.slug} />
                 </label>
-                <label className="text-sm">Categoría
+                <label className="text-sm">Categoría *
                   <select className={inputClass} onChange={(event) => changeProduct({ categoryId: Number(event.target.value) })}
                     required value={draft.categoryId}>
-                    <option value={0}>Selecciona una categoría</option>
-                    {vocabulary.categories.filter((item) => item.isActive || item.id === draft.categoryId).map((item) =>
-                      <option key={item.id} value={item.id}>{item.name}{item.isActive ? "" : " (inactiva)"}</option>)}
+                    <option disabled value={0}>Selecciona una categoría</option>
+                    {vocabulary.categories.filter((item) => (item.isActive && !item.isDeleted) || item.id === draft.categoryId).map((item) =>
+                      <option key={item.id} value={item.id}>{item.name}{item.isDeleted ? " (papelera)" : item.isActive ? "" : " (inactiva)"}</option>)}
                   </select>
                 </label>
                 <label className="text-sm">Marca (opcional)
                   <select className={inputClass} onChange={(event) => changeProduct({ brandId: Number(event.target.value) })}
                     value={draft.brandId}>
                     <option value={0}>Sin marca</option>
-                    {vocabulary.brands.filter((item) => item.isActive || item.id === draft.brandId).map((item) =>
-                      <option key={item.id} value={item.id}>{item.name}{item.isActive ? "" : " (inactiva)"}</option>)}
+                    {vocabulary.brands.filter((item) => (item.isActive && !item.isDeleted) || item.id === draft.brandId).map((item) =>
+                      <option key={item.id} value={item.id}>{item.name}{item.isDeleted ? " (papelera)" : item.isActive ? "" : " (inactiva)"}</option>)}
                   </select>
                 </label>
-                <label className="text-sm">Estado
+                <label className="text-sm">Estado *
                   <select className={inputClass} onChange={(event) => changeProduct({ status: event.target.value as DraftProduct["status"] })}
                     value={draft.status}>
                     <option value="draft">Borrador</option>
@@ -298,35 +332,40 @@ export default function ProductsEditor() {
                     {variant.id === 0 && <button className="text-sm text-red-700 underline" onClick={() => changeProduct({
                       variants: draft.variants.filter((item) => item.key !== variant.key),
                     })} type="button">Quitar</button>}
+                    {variant.id > 0 && <button className="text-sm text-red-700 underline" disabled={busy}
+                      onClick={() => void changeTrash(`/api/admin/catalog/variants/${variant.id}${variant.isDeleted ? "/restore" : ""}`,
+                        variant.isDeleted ? "POST" : "DELETE", draft.id)} type="button">
+                      {variant.isDeleted ? "Restaurar variante" : "Eliminar variante"}
+                    </button>}
                   </div>
                   <div className="mt-4 grid gap-4 md:grid-cols-3">
-                    <label className="text-sm">SKU {variant.id > 0 && "(fijo)"}
-                      <input className={inputClass} disabled={variant.id > 0} maxLength={64}
-                        onChange={(event) => changeVariant(index, { sku: event.target.value })}
-                        pattern="[A-Za-z0-9][A-Za-z0-9._-]*" required value={variant.sku} />
-                    </label>
-                    <label className="text-sm">Precio de venta (Bs)
-                      <input className={inputClass} inputMode="decimal" onChange={(event) => changeVariant(index, { priceText: event.target.value })}
+                    <div className="text-sm">SKU
+                      <p className="mt-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-zinc-600">
+                        {variant.sku || "Se generará al guardar"}
+                      </p>
+                    </div>
+                    <label className="text-sm">Precio de venta (Bs) *
+                      <input className={inputClass} disabled={variant.isDeleted} inputMode="decimal" onChange={(event) => changeVariant(index, { priceText: event.target.value })}
                         placeholder="120.00" required value={variant.priceText} />
                     </label>
                     <label className="text-sm">Precio anterior (Bs, opcional)
-                      <input className={inputClass} inputMode="decimal" onChange={(event) => changeVariant(index, { compareText: event.target.value })}
+                      <input className={inputClass} disabled={variant.isDeleted} inputMode="decimal" onChange={(event) => changeVariant(index, { compareText: event.target.value })}
                         value={variant.compareText} />
                     </label>
                     {variantAttributes.map((attribute) => {
                       const selected = variant.optionIds.find((id) => attribute.options.some((option) => option.id === id)) || 0;
                       return <label className="text-sm" key={attribute.id}>{attribute.name} {variant.id > 0 && "(fijo)"}
-                        <select className={inputClass} disabled={variant.id > 0} onChange={(event) => chooseOption(attribute,
+                        <select className={inputClass} disabled={variant.id > 0 || variant.isDeleted} onChange={(event) => chooseOption(attribute,
                           Number(event.target.value), variant.optionIds, (ids) => changeVariant(index, { optionIds: ids }))}
                           value={selected}>
                           <option value={0}>No aplica</option>
                           {optionsForAttribute(attribute, selected).map((option) =>
-                            <option key={option.id} value={option.id}>{option.value}{option.isActive ? "" : " (inactiva)"}</option>)}
+                            <option key={option.id} value={option.id}>{option.value}{option.isDeleted ? " (papelera)" : option.isActive ? "" : " (inactiva)"}</option>)}
                         </select>
                       </label>;
                     })}
                     <label className="flex items-end gap-2 pb-2 text-sm">
-                      <input checked={variant.isActive} onChange={(event) => changeVariant(index, { isActive: event.target.checked })}
+                      <input checked={variant.isActive} disabled={variant.isDeleted} onChange={(event) => changeVariant(index, { isActive: event.target.checked })}
                         type="checkbox" /> Variante activa
                     </label>
                   </div>
@@ -361,11 +400,30 @@ export default function ProductsEditor() {
                       event.target.value = "";
                     }} type="file" />
                 </label>
+                <label className="text-sm">Elegir del banco
+                  <select className={inputClass} onChange={(event) => setSelectedMediaID(Number(event.target.value))}
+                    value={selectedMediaID}>
+                    <option value={0}>Selecciona una imagen</option>
+                    {library.filter((item) => !item.isDeleted && !draft.media.some((used) => used.id === item.id)).map((item) =>
+                      <option key={item.id} value={item.id}>{item.altText || `Imagen ${item.id}`}</option>)}
+                  </select>
+                </label>
+                <button className="rounded-lg border border-zinc-300 px-4 py-2 text-sm" disabled={!selectedMediaID || draft.media.length >= 12}
+                  onClick={() => {
+                    const item = library.find((media) => media.id === selectedMediaID && !media.isDeleted);
+                    if (item) changeProduct({ media: [...draft.media, item] });
+                    setSelectedMediaID(0);
+                  }} type="button">Agregar imagen</button>
               </div>
             </section>
           </fieldset>
           <div className="sticky bottom-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-lg">
-            <button className={buttonClass} disabled={busy} type="submit">{busy ? "Guardando…" : "Guardar producto"}</button>
+            <button className={buttonClass} disabled={busy || draft.isDeleted} type="submit">{busy ? "Guardando…" : "Guardar producto"}</button>
+            {draft.id > 0 && <button className="ml-3 text-sm text-red-700 underline" disabled={busy}
+              onClick={() => void changeTrash(`/api/admin/catalog/products/${draft.id}${draft.isDeleted ? "/restore" : ""}`,
+                draft.isDeleted ? "POST" : "DELETE", draft.id)} type="button">
+              {draft.isDeleted ? "Restaurar producto" : "Eliminar producto"}
+            </button>}
             <span className="ml-3 text-sm text-zinc-500">{draft.id ? `Revisión ${draft.revision}` : "Nuevo producto"}</span>
           </div>
         </form>

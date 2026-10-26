@@ -10,9 +10,9 @@ El propietario puede abrir `/admin/catalogo/vocabulario` para crear y editar cat
 - **Atributo de variante**: distingue combinaciones vendibles, por ejemplo talla o color.
 - **Opción**: valor concreto de un atributo. Puede tener un color HEX opcional para mostrar una muestra visual.
 
-El propietario decide los nombres y valores. No se crean categorías, tallas, colores ni valores de público automáticamente. Los identificadores técnicos (`slug` y `code`) usan letras minúsculas, números, guion o guion bajo; empiezan con una letra y tienen entre 2 y 64 caracteres. Quedan fijos después de crear el registro. El alcance `product` o `variant` de un atributo también queda fijo: cambiarlo después de crear productos podría alterar el significado de sus variantes.
+El propietario decide los nombres y valores. No se crean categorías, tallas, colores ni valores de público automáticamente. Los identificadores técnicos (`slug` y `code`) se sugieren a partir del nombre y el servidor les añade un sufijo si el valor automático ya existe. Se pueden modificar desde el panel. Usan letras minúsculas, números, guion o guion bajo; empiezan con una letra y tienen entre 2 y 64 caracteres. El alcance `product` o `variant` de un atributo queda fijo: cambiarlo después de crear productos podría alterar el significado de sus variantes.
 
-Cada registro se puede renombrar o desactivar y reactivar. Desactivarlo conserva sus referencias históricas; no se ofrece borrado físico. La creación de productos deberá ofrecer solo categorías, marcas y opciones activas, y la API deberá verificarlo de nuevo antes de guardar.
+Cada registro se puede renombrar, desactivar o enviar a la papelera y restaurar. La papelera conserva sus referencias históricas y el estado activo anterior; no borra físicamente. La creación de productos ofrece solo categorías, marcas y opciones activas que no estén en la papelera, y la API vuelve a verificarlo antes de guardar.
 
 ## Prueba local
 

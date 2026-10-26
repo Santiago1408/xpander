@@ -48,7 +48,7 @@ export default function LoginForm() {
     <form className="mt-8 space-y-5" onSubmit={submit}>
       <div>
         <label className="block text-sm font-medium" htmlFor="username">
-          Nombre de usuario
+          Nombre de usuario *
         </label>
         <input
           autoComplete="username"
@@ -62,7 +62,7 @@ export default function LoginForm() {
       </div>
       <div>
         <label className="block text-sm font-medium" htmlFor="password">
-          Contraseña
+          Contraseña *
         </label>
         <input
           autoComplete="current-password"

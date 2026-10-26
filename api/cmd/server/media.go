@@ -135,6 +135,79 @@ func (service *landingService) uploadMedia(w http.ResponseWriter, r *http.Reques
 	})
 }
 
+type mediaLibraryItem struct {
+	ID        int64  `json:"id"`
+	Kind      string `json:"kind"`
+	URL       string `json:"url"`
+	AltText   string `json:"altText"`
+	IsDeleted bool   `json:"isDeleted"`
+	UseCount  int64  `json:"useCount"`
+}
+
+func (service *landingService) listMedia(w http.ResponseWriter, r *http.Request) {
+	if _, ok := service.requireOwner(w, r, false); !ok {
+		return
+	}
+	rows, err := service.pool.Query(r.Context(), `SELECT m.id, COALESCE(m.alt_text,''),
+		m.deleted_at IS NOT NULL,
+		(SELECT count(*) FROM product_media pm WHERE pm.media_id=m.id)
+		+ (SELECT count(*) FROM page_section_media sm WHERE sm.media_id=m.id)
+		+ (SELECT count(*) FROM page_publication_media pubm WHERE pubm.media_id=m.id)
+		FROM media m WHERE m.kind='image' AND m.source_type='local'
+		ORDER BY m.id DESC`)
+	if err != nil {
+		serverError(w, "list media library", err)
+		return
+	}
+	defer rows.Close()
+	items := []mediaLibraryItem{}
+	for rows.Next() {
+		var item mediaLibraryItem
+		if err := rows.Scan(&item.ID, &item.AltText, &item.IsDeleted, &item.UseCount); err != nil {
+			serverError(w, "scan media library", err)
+			return
+		}
+		item.URL = fmt.Sprintf("/api/admin/media/%d", item.ID)
+		item.Kind = "image"
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		serverError(w, "list media library", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (service *landingService) trashMedia(w http.ResponseWriter, r *http.Request) {
+	service.changeMediaTrash(w, r, false)
+}
+
+func (service *landingService) restoreMedia(w http.ResponseWriter, r *http.Request) {
+	service.changeMediaTrash(w, r, true)
+}
+
+func (service *landingService) changeMediaTrash(w http.ResponseWriter, r *http.Request, restore bool) {
+	if _, ok := service.requireOwner(w, r, true); !ok {
+		return
+	}
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	query := `UPDATE media SET deleted_at=now() WHERE id=$1 AND kind='image'
+		AND source_type='local' AND deleted_at IS NULL RETURNING id`
+	if restore {
+		query = `UPDATE media SET deleted_at=NULL WHERE id=$1 AND kind='image'
+			AND source_type='local' AND deleted_at IS NOT NULL RETURNING id`
+	}
+	var found int64
+	if err := service.pool.QueryRow(r.Context(), query, id).Scan(&found); err != nil {
+		vocabularyDBError(w, "change media recycle bin", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (service *landingService) serveAdminMedia(w http.ResponseWriter, r *http.Request) {
 	if _, ok := service.requireOwner(w, r, false); !ok {
 		return
@@ -160,9 +233,17 @@ func (service *landingService) serveStoredMedia(w http.ResponseWriter, r *http.R
 			EXISTS (SELECT 1 FROM page_publication_media WHERE media_id=$1)
 			OR EXISTS (SELECT 1 FROM product_media pm
 				JOIN products p ON p.id=pm.product_id
+				JOIN categories c ON c.id=p.category_id
 				WHERE pm.media_id=$1 AND p.status='active'
+				AND p.deleted_at IS NULL AND c.deleted_at IS NULL
+				AND media.deleted_at IS NULL
 				AND EXISTS (SELECT 1 FROM product_variants v
-					WHERE v.product_id=p.id AND v.is_active))
+					WHERE v.product_id=p.id AND v.is_active AND v.deleted_at IS NULL
+					AND NOT EXISTS (SELECT 1 FROM variant_option_values vov
+						JOIN attribute_options o ON o.id=vov.option_id
+						JOIN attribute_definitions d ON d.id=vov.attribute_definition_id
+						WHERE vov.variant_id=v.id AND
+						(o.deleted_at IS NOT NULL OR d.deleted_at IS NOT NULL))))
 		)`
 	}
 	err = service.pool.QueryRow(r.Context(), query, id).Scan(&key, &mimeType)

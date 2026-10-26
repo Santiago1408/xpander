@@ -26,3 +26,5 @@ La [guía de acceso administrativo](docs/05-acceso-admin.md) explica cómo crear
 El [vocabulario del catálogo](docs/06-vocabulario-catalogo.md) ya se puede gestionar desde el panel: categorías, marcas, atributos y opciones, sin listas predefinidas.
 
 La [guía de productos](docs/07-productos-y-catalogo.md) describe cómo crear fichas y variantes, y cómo comprobar su publicación en `/catalogo`.
+
+El [banco de imágenes y la papelera](docs/08-identificadores-y-papelera.md) permiten reutilizar imágenes y restaurar elementos retirados del panel.

@@ -17,6 +17,8 @@ export default function AdminHomePage() {
           href="/admin/catalogo/vocabulario">Datos del catálogo</Link>
         <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
           href="/admin/catalogo/productos">Productos</Link>
+        <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
+          href="/admin/medios">Banco de imágenes</Link>
       </div>
     </section>
   );
