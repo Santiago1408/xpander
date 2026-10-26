@@ -52,4 +52,4 @@ Para detener los servicios sin borrar los datos:
 sudo docker compose -f compose.dev.yaml down
 ```
 
-No uses `down -v` salvo que quieras borrar expresamente la base de datos local **y las imágenes cargadas en `media_data`**. El editor de la landing está en `/admin/contenido`, el vocabulario en `/admin/catalogo/vocabulario`, las fichas en `/admin/catalogo/productos` y el catálogo público en `/catalogo`. El inventario y los pedidos quedan para etapas siguientes.
+No uses `down -v` salvo que quieras borrar expresamente la base de datos local **y las imágenes cargadas en `media_data`**. El editor de la landing está en `/admin/contenido`, las marcas en `/admin/catalogo/marcas`, las fichas en `/admin/catalogo/productos`, el inventario en `/admin/inventario` y el catálogo público en `/catalogo`. Para limpiar los datos de prueba conservando la cuenta administrativa y las sucursales, usa el [comando de reinicio](10-reinicio-datos-prueba.md).

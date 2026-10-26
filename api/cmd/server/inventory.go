@@ -110,7 +110,8 @@ func (service *inventoryService) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err = tx.Query(r.Context(), `SELECT v.id, p.name || ' · ' || v.code || ' · ' || v.size_label
+	rows, err = tx.Query(r.Context(), `SELECT v.id, p.name || ' · ' || v.code || ' · ' ||
+		concat_ws(' / ', v.size_alpha, v.size_numeric)
 		FROM product_variants v JOIN products p ON p.id=v.product_id
 		WHERE v.deleted_at IS NULL AND p.deleted_at IS NULL
 		ORDER BY p.name, v.sku`)
@@ -135,7 +136,8 @@ func (service *inventoryService) list(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err = tx.Query(r.Context(), `SELECT s.branch_id, s.variant_id,
-		b.name || ' · ' || p.name || ' · ' || v.code || ' · ' || v.size_label, s.quantity
+		b.name || ' · ' || p.name || ' · ' || v.code || ' · ' ||
+		concat_ws(' / ', v.size_alpha, v.size_numeric), s.quantity
 		FROM branch_stock s JOIN branches b ON b.id=s.branch_id
 		JOIN product_variants v ON v.id=s.variant_id JOIN products p ON p.id=v.product_id
 		ORDER BY b.name, p.name, v.sku`)
@@ -159,7 +161,8 @@ func (service *inventoryService) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err = tx.Query(r.Context(), `SELECT m.id, b.name, p.name || ' · ' || v.code || ' · ' || v.size_label,
+	rows, err = tx.Query(r.Context(), `SELECT m.id, b.name, p.name || ' · ' || v.code || ' · ' ||
+		concat_ws(' / ', v.size_alpha, v.size_numeric),
 		m.kind, m.delta, m.unit_cost_minor, COALESCE(m.note,''), COALESCE(u.username,''), m.created_at
 		FROM stock_movements m JOIN branches b ON b.id=m.branch_id
 		JOIN product_variants v ON v.id=m.variant_id JOIN products p ON p.id=v.product_id

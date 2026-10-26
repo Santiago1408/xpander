@@ -67,7 +67,7 @@ func run() error {
 		return errors.New("MEDIA_DIR is required")
 	}
 	registerLandingRoutes(mux, pool, admin, mediaDir)
-	registerVocabularyRoutes(mux, pool, admin)
+	registerBrandRoutes(mux, pool, admin)
 	registerProductRoutes(mux, pool, admin)
 	registerQuickCatalogRoutes(mux, pool, admin)
 	registerTrashRoutes(mux, pool, admin, mediaDir)

@@ -6,19 +6,26 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type quickVariantInput struct {
-	ID                int64  `json:"id"`
-	Size              string `json:"size"`
-	RegularPriceMinor int64  `json:"regularPriceMinor"`
-	OfferPriceMinor   *int64 `json:"offerPriceMinor"`
-	StockQuantity     int64  `json:"stockQuantity"`
-	UnitCostMinor     *int64 `json:"unitCostMinor"`
-	IsActive          bool   `json:"isActive"`
+	ID                int64             `json:"id"`
+	SizeAlpha         string            `json:"sizeAlpha"`
+	SizeNumeric       string            `json:"sizeNumeric"`
+	RegularPriceMinor int64             `json:"regularPriceMinor"`
+	OfferPriceMinor   *int64            `json:"offerPriceMinor"`
+	StockEntries      []quickStockEntry `json:"stockEntries"`
+	IsActive          bool              `json:"isActive"`
+}
+
+type quickStockEntry struct {
+	BranchID      int64 `json:"branchId"`
+	Quantity      int64 `json:"quantity"`
+	UnitCostMinor int64 `json:"unitCostMinor"`
 }
 
 type quickProductInput struct {
@@ -30,12 +37,29 @@ type quickProductInput struct {
 	Style       string              `json:"style"`
 	Audience    string              `json:"audience"`
 	Color       string              `json:"color"`
-	Brand       string              `json:"brand"`
+	BrandID     int64               `json:"brandId"`
 	Status      string              `json:"status"`
 	IsFeatured  bool                `json:"isFeatured"`
-	BranchID    int64               `json:"branchId"`
 	MediaIDs    []int64             `json:"mediaIds"`
 	Variants    []quickVariantInput `json:"variants"`
+}
+
+func containsLetter(value string) bool {
+	for _, char := range value {
+		if unicode.IsLetter(char) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsDigit(value string) bool {
+	for _, char := range value {
+		if unicode.IsDigit(char) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeQuickProduct(input *quickProductInput) error {
@@ -44,7 +68,6 @@ func normalizeQuickProduct(input *quickProductInput) error {
 	input.Slug = strings.TrimSpace(input.Slug)
 	input.Style = displayLabel(input.Style)
 	input.Audience = displayLabel(input.Audience)
-	input.Brand = displayLabel(input.Brand)
 	input.Color = displayLabel(input.Color)
 	if input.Revision < 0 || !validVocabularyName(input.Name) || len(input.Description) > 10000 ||
 		(input.Slug != "" && !vocabularyCodePattern.MatchString(input.Slug)) ||
@@ -52,50 +75,59 @@ func normalizeQuickProduct(input *quickProductInput) error {
 		!validUniqueIDs(input.MediaIDs, 12) || len(input.Variants) < 1 || len(input.Variants) > 99 {
 		return errors.New("datos del producto inválidos")
 	}
-	for _, label := range []string{input.Style, input.Audience, input.Brand, input.Color} {
+	if input.BrandID < 0 {
+		return errors.New("marca inválida")
+	}
+	for _, label := range []string{input.Style, input.Audience, input.Color} {
 		if len(label) > 120 || (label != "" && catalogKey(label) == "") {
-			return errors.New("categoría, marca o color inválido")
+			return errors.New("estilo, público o color inválido")
 		}
 	}
 	if input.RequestKey != "" && !stockRequestKeyPattern.MatchString(input.RequestKey) {
 		return errors.New("clave de solicitud inválida")
 	}
 	seenIDs := map[int64]bool{}
-	seenSizes := map[string]bool{}
-	needsBranch := false
+	seenAlpha := map[string]bool{}
+	seenNumeric := map[string]bool{}
 	activeCount := 0
 	for index := range input.Variants {
 		variant := &input.Variants[index]
-		variant.Size = displayLabel(variant.Size)
-		if len(input.Variants) == 1 {
-			variant.Size = "ÚNICA"
-		}
-		key := catalogKey(variant.Size)
+		variant.SizeAlpha = displayLabel(variant.SizeAlpha)
+		variant.SizeNumeric = displayLabel(variant.SizeNumeric)
+		alphaKey := catalogKey(variant.SizeAlpha)
+		numericKey := catalogKey(variant.SizeNumeric)
 		if variant.ID < 0 || (variant.ID > 0 && seenIDs[variant.ID]) ||
-			key == "" || len(variant.Size) > 40 || seenSizes[key] ||
-			(len(input.Variants) > 1 && key == catalogKey("ÚNICA")) ||
+			(alphaKey == "" && numericKey == "") ||
+			len(variant.SizeAlpha) > 40 || len(variant.SizeNumeric) > 40 ||
+			(alphaKey != "" && (seenAlpha[alphaKey] || alphaKey == "UNICA")) ||
+			(numericKey != "" && seenNumeric[numericKey]) ||
+			(variant.SizeAlpha != "" && !containsLetter(variant.SizeAlpha)) ||
+			(variant.SizeNumeric != "" && !containsDigit(variant.SizeNumeric)) ||
 			variant.RegularPriceMinor <= 0 || variant.RegularPriceMinor > 1_000_000_000 ||
-			(variant.OfferPriceMinor != nil && (*variant.OfferPriceMinor <= 0 || *variant.OfferPriceMinor >= variant.RegularPriceMinor)) ||
-			variant.StockQuantity < 0 || variant.StockQuantity > 1_000_000 ||
-			(variant.StockQuantity > 0 && (variant.UnitCostMinor == nil || *variant.UnitCostMinor < 0 || *variant.UnitCostMinor > 1_000_000_000)) {
+			(variant.OfferPriceMinor != nil && (*variant.OfferPriceMinor <= 0 || *variant.OfferPriceMinor >= variant.RegularPriceMinor)) || len(variant.StockEntries) > 100 {
 			return errors.New("talla, precio, oferta o inventario inválido")
 		}
-		if variant.StockQuantity == 0 {
-			variant.UnitCostMinor = nil
-		} else {
-			needsBranch = true
+		seenBranches := map[int64]bool{}
+		for _, entry := range variant.StockEntries {
+			if entry.BranchID <= 0 || seenBranches[entry.BranchID] || entry.Quantity <= 0 ||
+				entry.Quantity > 1_000_000 || entry.UnitCostMinor < 0 || entry.UnitCostMinor > 1_000_000_000 {
+				return errors.New("sucursal, cantidad o costo inválido")
+			}
+			seenBranches[entry.BranchID] = true
 		}
 		seenIDs[variant.ID] = true
-		seenSizes[key] = true
+		if alphaKey != "" {
+			seenAlpha[alphaKey] = true
+		}
+		if numericKey != "" {
+			seenNumeric[numericKey] = true
+		}
 		if variant.IsActive {
 			activeCount++
 		}
 	}
 	if input.Status == "active" && activeCount == 0 {
 		return errors.New("un producto visible necesita una talla activa")
-	}
-	if needsBranch && input.BranchID <= 0 {
-		return errors.New("elige una sucursal para registrar inventario")
 	}
 	return nil
 }
@@ -184,31 +216,22 @@ func (service *productService) saveQuick(w http.ResponseWriter, r *http.Request,
 			input.Slug = oldSlug
 		}
 	}
-	var styleID, audienceID, brandID, colorID int64
-	for _, item := range []struct {
-		table, kind, value string
-		output             *int64
-	}{
-		{"categories", "style", input.Style, &styleID},
-		{"categories", "audience", input.Audience, &audienceID},
-		{"brands", "", input.Brand, &brandID},
-		{"colors", "", input.Color, &colorID},
-	} {
-		*item.output, err = resolveTerm(r.Context(), tx, item.table, item.kind, item.value)
-		if err != nil {
-			service.quickError(w, "resolve quick catalog term", err)
+	if input.BrandID > 0 {
+		var found int64
+		if err := tx.QueryRow(r.Context(), `SELECT id FROM brands WHERE id=$1`, input.BrandID).Scan(&found); err != nil {
+			vocabularyDBError(w, "find product brand", err)
 			return
 		}
 	}
-	needsBranch := false
+	branchIDs := map[int64]bool{}
 	for _, variant := range input.Variants {
-		if variant.StockQuantity > 0 {
-			needsBranch = true
+		for _, entry := range variant.StockEntries {
+			branchIDs[entry.BranchID] = true
 		}
 	}
-	if needsBranch {
+	for branchID := range branchIDs {
 		var active bool
-		err = tx.QueryRow(r.Context(), `SELECT is_active FROM branches WHERE id=$1`, input.BranchID).Scan(&active)
+		err = tx.QueryRow(r.Context(), `SELECT is_active FROM branches WHERE id=$1`, branchID).Scan(&active)
 		if errors.Is(err, pgx.ErrNoRows) || err == nil && !active {
 			http.Error(w, "sucursal inactiva o inexistente", http.StatusBadRequest)
 			return
@@ -248,11 +271,10 @@ func (service *productService) saveQuick(w http.ResponseWriter, r *http.Request,
 				slug = codeWithSuffix(base, attempt)
 			}
 			err = tx.QueryRow(r.Context(), `INSERT INTO products
-				(category_id, audience_category_id, brand_id, color_id, slug, name,
+				(style_label, audience_label, brand_id, color_label, slug, name,
 				description, status, is_featured, create_request_key)
-				VALUES (NULLIF($1::bigint,0),NULLIF($2::bigint,0),NULLIF($3::bigint,0),
-					NULLIF($4::bigint,0),$5,$6,NULLIF($7,''),$8,$9,$10::uuid)
-				ON CONFLICT DO NOTHING RETURNING id`, styleID, audienceID, brandID, colorID,
+				VALUES ($1,$2,NULLIF($3::bigint,0),$4,$5,$6,NULLIF($7,''),$8,$9,$10::uuid)
+				ON CONFLICT DO NOTHING RETURNING id`, input.Style, input.Audience, input.BrandID, input.Color,
 				slug, input.Name, input.Description, input.Status, input.IsFeatured, input.RequestKey).Scan(&productID)
 			if err == nil {
 				break
@@ -277,11 +299,11 @@ func (service *productService) saveQuick(w http.ResponseWriter, r *http.Request,
 			return
 		}
 	} else {
-		_, err = tx.Exec(r.Context(), `UPDATE products SET category_id=NULLIF($2::bigint,0),
-			audience_category_id=NULLIF($3::bigint,0), brand_id=NULLIF($4::bigint,0),
-			color_id=NULLIF($5::bigint,0), slug=$6, name=$7, description=NULLIF($8,''),
+		_, err = tx.Exec(r.Context(), `UPDATE products SET style_label=$2,
+			audience_label=$3, brand_id=NULLIF($4::bigint,0),
+			color_label=$5, slug=$6, name=$7, description=NULLIF($8,''),
 			status=$9, is_featured=$10, revision=revision+1, updated_at=now()
-			WHERE id=$1`, productID, styleID, audienceID, brandID, colorID, input.Slug,
+			WHERE id=$1`, productID, input.Style, input.Audience, input.BrandID, input.Color, input.Slug,
 			input.Name, input.Description, input.Status, input.IsFeatured)
 		if err != nil {
 			service.quickError(w, "update quick product", err)
@@ -312,18 +334,17 @@ func (service *productService) saveQuick(w http.ResponseWriter, r *http.Request,
 			return
 		}
 	}
-	// Temporary unique signatures allow two existing sizes to be exchanged in one save.
+	// Free the unique size keys so two existing variants can exchange sizes in one save.
 	for id := range existingIDs {
-		if _, err := tx.Exec(r.Context(), `UPDATE product_variants
-			SET option_signature=$2 WHERE id=$1`, id, fmt.Sprintf("QUICK-TRANSITION-%d", id)); err != nil {
-			service.quickError(w, "prepare quick variants", err)
+		if _, err := tx.Exec(r.Context(), `UPDATE product_variants SET size_alpha_key=NULL,
+			size_numeric_key=NULL WHERE id=$1`, id); err != nil {
+			service.quickError(w, "prepare variant sizes", err)
 			return
 		}
 	}
 	seenExisting := map[int64]bool{}
 	for index, variant := range input.Variants {
 		variantID := variant.ID
-		key := catalogKey(variant.Size)
 		price := variant.RegularPriceMinor
 		var compareAt *int64
 		if variant.OfferPriceMinor != nil {
@@ -336,16 +357,14 @@ func (service *productService) saveQuick(w http.ResponseWriter, r *http.Request,
 				return
 			}
 			seenExisting[variantID] = true
-			_, err = tx.Exec(r.Context(), `UPDATE product_variants SET size_label=$2,
-				option_signature=$3, price_minor=$4, compare_at_price_minor=$5,
-				is_active=$6, sort_order=$7, updated_at=now() WHERE id=$1`, variantID,
-				variant.Size, "SIZE:"+key, price, compareAt, variant.IsActive, index*10)
+			_, err = tx.Exec(r.Context(), `UPDATE product_variants SET size_alpha=NULLIF($2,''),
+				size_numeric=NULLIF($3,''), size_alpha_key=NULLIF($4,''),
+				size_numeric_key=NULLIF($5,''), price_minor=$6, compare_at_price_minor=$7,
+				is_active=$8, sort_order=$9, updated_at=now() WHERE id=$1`, variantID,
+				variant.SizeAlpha, variant.SizeNumeric, catalogKey(variant.SizeAlpha),
+				catalogKey(variant.SizeNumeric), price, compareAt, variant.IsActive, index*10)
 			if err != nil {
 				service.quickError(w, "update quick variant", err)
-				return
-			}
-			if _, err := tx.Exec(r.Context(), `DELETE FROM variant_option_values WHERE variant_id=$1`, variantID); err != nil {
-				serverError(w, "clear legacy variant options", err)
 				return
 			}
 		} else {
@@ -355,20 +374,22 @@ func (service *productService) saveQuick(w http.ResponseWriter, r *http.Request,
 				return
 			}
 			err = tx.QueryRow(r.Context(), `INSERT INTO product_variants
-				(product_id, sku, size_label, option_signature, price_minor,
-				compare_at_price_minor, is_active, sort_order)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, productID,
-				sku, variant.Size, "SIZE:"+key, price, compareAt, variant.IsActive, index*10).Scan(&variantID)
+				(product_id, sku, size_alpha, size_numeric, size_alpha_key,
+				size_numeric_key, price_minor, compare_at_price_minor, is_active, sort_order)
+				VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),NULLIF($6,''),$7,$8,$9,$10)
+				RETURNING id`, productID, sku, variant.SizeAlpha, variant.SizeNumeric,
+				catalogKey(variant.SizeAlpha), catalogKey(variant.SizeNumeric), price,
+				compareAt, variant.IsActive, index*10).Scan(&variantID)
 			if err != nil {
 				service.quickError(w, "create quick variant", err)
 				return
 			}
 		}
-		if variant.StockQuantity > 0 {
+		for _, entry := range variant.StockEntries {
 			_, err = tx.Exec(r.Context(), `INSERT INTO stock_movements
 				(branch_id, variant_id, kind, delta, unit_cost_minor, recorded_by_user_id, note)
-				VALUES ($1,$2,'purchase',$3,$4,$5,$6)`, input.BranchID, variantID,
-				variant.StockQuantity, variant.UnitCostMinor, user.ID,
+				VALUES ($1,$2,'purchase',$3,$4,$5,$6)`, entry.BranchID, variantID,
+				entry.Quantity, entry.UnitCostMinor, user.ID,
 				fmt.Sprintf("Carga desde ficha de producto %d", productID))
 			if err != nil {
 				service.quickError(w, "record initial stock", err)
@@ -378,10 +399,6 @@ func (service *productService) saveQuick(w http.ResponseWriter, r *http.Request,
 	}
 	if len(existingIDs) != len(seenExisting) {
 		http.Error(w, "faltan variantes existentes; recarga la ficha", http.StatusConflict)
-		return
-	}
-	if _, err := tx.Exec(r.Context(), `DELETE FROM product_option_values WHERE product_id=$1`, productID); err != nil {
-		serverError(w, "clear legacy product options", err)
 		return
 	}
 	if _, err := tx.Exec(r.Context(), `DELETE FROM product_media WHERE product_id=$1`, productID); err != nil {

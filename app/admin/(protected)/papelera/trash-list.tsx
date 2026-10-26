@@ -6,8 +6,7 @@ import TrashActions, { ConfirmPurge, trashKindLabel, type TrashRef } from "./tra
 type TrashItem = TrashRef & { deletedAt: string };
 
 const purgeOrder: Record<string, number> = {
-  section: 0, variant: 1, product: 2, option: 3, attribute: 4,
-  brand: 5, color: 5, category: 6, media: 7,
+  section: 0, variant: 1, product: 2, media: 3,
 };
 
 export default function TrashList() {

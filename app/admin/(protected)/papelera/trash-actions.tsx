@@ -5,7 +5,6 @@ import { useState } from "react";
 export type TrashRef = { kind: string; id: number; label: string };
 
 export const trashKindLabel: Record<string, string> = {
-  category: "Categoría", brand: "Marca", color: "Color", attribute: "Atributo", option: "Opción",
   product: "Producto", variant: "Variante", media: "Imagen", section: "Sección de la landing",
 };
 

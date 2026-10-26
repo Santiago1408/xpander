@@ -58,15 +58,8 @@ func (service *trashService) list(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := service.pool.Query(r.Context(), `
 		SELECT kind, id, label, deleted_at FROM (
-			SELECT 'category'::text kind, id, name label, deleted_at FROM categories WHERE deleted_at IS NOT NULL
-			UNION ALL SELECT 'brand', id, name, deleted_at FROM brands WHERE deleted_at IS NOT NULL
-			UNION ALL SELECT 'color', id, name, deleted_at FROM colors WHERE deleted_at IS NOT NULL
-			UNION ALL SELECT 'attribute', id, name, deleted_at FROM attribute_definitions WHERE deleted_at IS NOT NULL
-			UNION ALL SELECT 'option', o.id, d.name || ': ' || o.value, o.deleted_at
-				FROM attribute_options o JOIN attribute_definitions d ON d.id=o.attribute_definition_id
-				WHERE o.deleted_at IS NOT NULL
-			UNION ALL SELECT 'product', id, name, deleted_at FROM products WHERE deleted_at IS NOT NULL
-			UNION ALL SELECT 'variant', v.id, p.name || ' · ' || v.sku, v.deleted_at
+			SELECT 'product'::text kind, id, name label, deleted_at FROM products WHERE deleted_at IS NOT NULL
+			UNION ALL SELECT 'variant', v.id, p.name || ' · ' || v.code, v.deleted_at
 				FROM product_variants v JOIN products p ON p.id=v.product_id WHERE v.deleted_at IS NOT NULL
 			UNION ALL SELECT 'media', id, COALESCE(NULLIF(alt_text,''), 'Imagen ' || id::text), deleted_at
 				FROM media WHERE deleted_at IS NOT NULL AND kind='image' AND source_type='local'
@@ -95,8 +88,7 @@ func (service *trashService) list(w http.ResponseWriter, r *http.Request) {
 }
 
 var trashTables = map[string]string{
-	"category": "categories", "brand": "brands", "color": "colors", "attribute": "attribute_definitions",
-	"option": "attribute_options", "product": "products", "variant": "product_variants",
+	"product": "products", "variant": "product_variants",
 	"media": "media", "section": "page_sections",
 }
 

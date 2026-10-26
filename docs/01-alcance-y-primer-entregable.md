@@ -9,7 +9,7 @@
 - Estados iniciales de pedido: pendiente, confirmado y cancelado. Abrir WhatsApp no prueba que el mensaje se haya enviado.
 - El panel permite administrar todo el contenido de secciones predefinidas de la landing, incluidas imágenes; también ordenarlas, ocultarlas y publicarlas.
 - Inventario inicialmente vacío. Un administrador al comienzo, con modelo preparado para más usuarios y sucursales.
-- Categorías, marcas, tallas, colores, público y otros atributos se crean en el panel. No habrá listas comerciales codificadas en la aplicación.
+- Las marcas se administran en el panel. Estilo, público y color son textos de cada producto; cada variante tiene talla alfabética, numérica o ambas.
 
 ## Arquitectura elegida
 
@@ -23,7 +23,7 @@
 ## Modelo inicial
 
 - `users`, `user_sessions`, `branches`, `user_branch_access`: un administrador y una sucursal iniciales, sin impedir expansión.
-- `categories`, `brands`, `attribute_definitions`, `attribute_options`: vocabulario administrable. Cada atributo podrá indicar si define variantes o solo describe un producto.
+- `brands`: marcas administrables. Estilo, público y color se guardan en la ficha; las tallas se guardan en cada variante.
 - `products`, `product_variants`, `product_media`: ficha comercial, SKU por combinación vendible, precio de venta y medios.
 - `stock_movements`, `branch_stock`: entradas, ajustes y salidas auditables por variante y sucursal. El costo de compra se registra en cada entrada.
 - `site_settings`, `pages`, `page_sections`, `media`: ajustes globales y contenido editable de la web, orden, visibilidad y referencias a imágenes o videos.
@@ -35,10 +35,10 @@ La primera entrega local debe atravesar las tres capas sin esperar a que esté l
 
 1. Levantar Next, Go y PostgreSQL con Compose en desarrollo.
 2. Iniciar sesión como administrador.
-3. Crear una categoría, una marca, un producto y una variante desde el panel.
+3. Crear una marca, un producto y una variante desde el panel.
 4. Ver el producto y su precio en el catálogo público.
 
-Puede usar una imagen provisional y datos de prueba. No requiere mercadería real ni publicar el sitio en el VPS. El acceso administrativo, la edición de la landing, el vocabulario, las fichas de productos y variantes y su vista pública ya están implementados. Falta comprobar este flujo completo contra PostgreSQL en el entorno local. Luego seguirán los movimientos de inventario, el carrito y los pedidos por WhatsApp, y el despliegue.
+Puede usar una imagen provisional y datos de prueba. No requiere mercadería real ni publicar el sitio en el VPS. El acceso administrativo, la edición de la landing, las marcas, las fichas, el inventario y la vista pública están implementados. Falta comprobar este flujo completo contra PostgreSQL en el entorno local. El carrito y los pedidos por WhatsApp quedan para una etapa posterior.
 
 El flujo de pedidos se verificará con nombre y teléfono del cliente, número de pedido, persistencia incluso si WhatsApp se cierra, confirmación o cancelación en el panel y descuento transaccional de existencias al confirmar.
 

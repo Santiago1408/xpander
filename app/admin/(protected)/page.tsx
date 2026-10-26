@@ -16,6 +16,8 @@ export default function AdminHomePage() {
         <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
           href="/admin/catalogo/productos">Productos</Link>
         <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
+          href="/admin/catalogo/marcas">Marcas</Link>
+        <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
           href="/admin/medios">Banco de imágenes</Link>
         <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
           href="/admin/papelera">Papelera</Link>

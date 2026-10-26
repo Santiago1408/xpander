@@ -13,14 +13,13 @@ type CatalogProduct = {
   code: string;
   name: string;
   description: string;
-  categoryName: string;
-  audienceName: string;
-  colorName: string;
+  style: string;
+  audience: string;
+  color: string;
   brandName: string;
   isFeatured: boolean;
-  productLabels: string[];
-  variants: { id: number; code: string; size: string; priceMinor: number;
-    compareAtPriceMinor: number | null; optionLabels: string[] }[];
+  variants: { id: number; code: string; sizeAlpha: string; sizeNumeric: string;
+    priceMinor: number; compareAtPriceMinor: number | null }[];
   media: { id: number; url: string; altText: string }[];
 };
 
@@ -57,20 +56,19 @@ async function ProductGrid() {
             </div>}
           <div className="p-5">
             <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
-              {product.categoryName && <span>{product.categoryName}</span>}
-              {product.audienceName && <span>· {product.audienceName}</span>}
-              {product.colorName && <span>· {product.colorName}</span>}
+              {product.style && <span>{product.style}</span>}
+              {product.audience && <span>· {product.audience}</span>}
+              {product.color && <span>· {product.color}</span>}
               {product.brandName && <span>· {product.brandName}</span>}
               {product.isFeatured && <span className="rounded-full bg-zinc-950 px-2 py-1 text-white">Destacado</span>}
             </div>
             <h2 className="mt-3 text-xl font-semibold">{product.name}</h2>
             <p className="mt-1 text-xs text-zinc-500">Código {product.code}</p>
             {product.description && <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm text-zinc-600">{product.description}</p>}
-            {product.productLabels.length > 0 && <p className="mt-3 text-sm text-zinc-500">{product.productLabels.join(" · ")}</p>}
             <p className="mt-5 text-lg font-semibold">{prices.length > 1 ? "Desde " : ""}{money(lowest)}</p>
             <ul className="mt-4 space-y-1 text-sm text-zinc-600">
               {product.variants.map((variant) => <li className="flex justify-between gap-3" key={variant.id}>
-                <span>{variant.size || variant.optionLabels.join(" · ")} · {variant.code}</span>
+                <span>{[variant.sizeAlpha, variant.sizeNumeric].filter(Boolean).join(" / ")} · {variant.code}</span>
                 <span className="text-right">
                   {variant.compareAtPriceMinor !== null && <span className="mr-2 text-zinc-400 line-through">{money(variant.compareAtPriceMinor)}</span>}
                   {money(variant.priceMinor)}
