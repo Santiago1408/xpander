@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { identifierFromName } from "../../../identifier";
+import TrashActions, { type TrashRef } from "../../papelera/trash-actions";
 
 type Category = { id: number; slug: string; name: string; description: string; isActive: boolean; isDeleted: boolean };
 type Brand = { id: number; slug: string; name: string; isActive: boolean; isDeleted: boolean };
@@ -9,7 +10,7 @@ type Option = { id: number; attributeDefinitionId: number; value: string; colorH
 type Attribute = { id: number; code: string; name: string; scope: "product" | "variant"; isActive: boolean; isDeleted: boolean; options: Option[] };
 type Vocabulary = { categories: Category[]; brands: Brand[]; attributes: Attribute[] };
 
-type Save = (path: string, method: "POST" | "PUT" | "DELETE", body?: object) => Promise<boolean>;
+type Save = (path: string, method: "POST" | "PUT" | "DELETE", body?: object, trash?: TrashRef) => Promise<boolean>;
 
 const inputClass = "mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm";
 const buttonClass = "rounded-lg bg-zinc-950 px-4 py-2 text-sm font-medium text-white disabled:opacity-50";
@@ -53,7 +54,8 @@ function CategoryRow({ item, busy, save }: { item: Category; busy: boolean; save
       </label>
       <button className="self-end text-left text-sm text-red-700 underline" disabled={busy}
         onClick={() => void save(`/api/admin/catalog/categories/${item.id}${item.isDeleted ? "/restore" : ""}`,
-          item.isDeleted ? "POST" : "DELETE")} type="button">{item.isDeleted ? "Restaurar" : "Eliminar"}</button>
+          item.isDeleted ? "POST" : "DELETE", undefined,
+          item.isDeleted ? undefined : { kind: "category", id: item.id, label: item.name })} type="button">{item.isDeleted ? "Restaurar" : "Eliminar"}</button>
       {item.isDeleted && <span className="text-xs text-red-700">En papelera</span>}
     </form>
   );
@@ -83,7 +85,8 @@ function BrandRow({ item, busy, save }: { item: Brand; busy: boolean; save: Save
       <button className={buttonClass} disabled={busy || item.isDeleted} type="submit">Guardar</button>
       <button className="text-sm text-red-700 underline" disabled={busy}
         onClick={() => void save(`/api/admin/catalog/brands/${item.id}${item.isDeleted ? "/restore" : ""}`,
-          item.isDeleted ? "POST" : "DELETE")} type="button">{item.isDeleted ? "Restaurar" : "Eliminar"}</button>
+          item.isDeleted ? "POST" : "DELETE", undefined,
+          item.isDeleted ? undefined : { kind: "brand", id: item.id, label: item.name })} type="button">{item.isDeleted ? "Restaurar" : "Eliminar"}</button>
       {item.isDeleted && <span className="w-full text-xs text-red-700">En papelera</span>}
     </form>
   );
@@ -113,7 +116,8 @@ function OptionRow({ item, busy, save }: { item: Option; busy: boolean; save: Sa
       <button className={buttonClass} disabled={busy || item.isDeleted} type="submit">Guardar</button>
       <button className="text-sm text-red-700 underline" disabled={busy}
         onClick={() => void save(`/api/admin/catalog/options/${item.id}${item.isDeleted ? "/restore" : ""}`,
-          item.isDeleted ? "POST" : "DELETE")} type="button">{item.isDeleted ? "Restaurar" : "Eliminar"}</button>
+          item.isDeleted ? "POST" : "DELETE", undefined,
+          item.isDeleted ? undefined : { kind: "option", id: item.id, label: item.value })} type="button">{item.isDeleted ? "Restaurar" : "Eliminar"}</button>
       {item.isDeleted && <span className="text-xs text-red-700">En papelera</span>}
     </form>
   );
@@ -154,7 +158,8 @@ function AttributeCard({ item, busy, save }: { item: Attribute; busy: boolean; s
         <button className={buttonClass} disabled={busy || item.isDeleted} type="submit">Guardar</button>
         <button className="text-sm text-red-700 underline" disabled={busy}
           onClick={() => void save(`/api/admin/catalog/attributes/${item.id}${item.isDeleted ? "/restore" : ""}`,
-            item.isDeleted ? "POST" : "DELETE")} type="button">{item.isDeleted ? "Restaurar" : "Eliminar"}</button>
+            item.isDeleted ? "POST" : "DELETE", undefined,
+            item.isDeleted ? undefined : { kind: "attribute", id: item.id, label: item.name })} type="button">{item.isDeleted ? "Restaurar" : "Eliminar"}</button>
       </form>
       <p className="mt-2 text-xs text-zinc-500">
         {item.scope === "variant" ? "Define variantes" : "Describe el producto"}
@@ -187,6 +192,7 @@ export default function VocabularyEditor() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [trashed, setTrashed] = useState<TrashRef | null>(null);
   const [categorySlug, setCategorySlug] = useState("");
   const [categorySlugEdited, setCategorySlugEdited] = useState(false);
   const [categoryName, setCategoryName] = useState("");
@@ -218,7 +224,7 @@ export default function VocabularyEditor() {
     void load();
   }, []);
 
-  async function save(path: string, method: "POST" | "PUT" | "DELETE", body?: object): Promise<boolean> {
+  async function save(path: string, method: "POST" | "PUT" | "DELETE", body?: object, trash?: TrashRef): Promise<boolean> {
     if (busy) return false;
     setBusy(true);
     setError("");
@@ -232,7 +238,8 @@ export default function VocabularyEditor() {
         throw new Error(detail || `No se pudo guardar (${response.status}).`);
       }
       await refresh();
-      setNotice("Cambios guardados.");
+      setTrashed(trash || null);
+      setNotice(trash ? "" : "Cambios guardados.");
       return true;
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "No se pudo guardar.");
@@ -271,6 +278,7 @@ export default function VocabularyEditor() {
     <div className="space-y-7">
       {error && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
       {notice && <p className="rounded-lg bg-green-50 p-4 text-sm text-green-800" role="status">{notice}</p>}
+      {trashed && <TrashActions item={trashed} notice onChanged={() => window.location.reload()} />}
       {!data ? <p className="text-zinc-600">Cargando datos…</p> : (
         <>
           <Panel title="Categorías">

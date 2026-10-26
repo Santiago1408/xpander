@@ -19,7 +19,9 @@ var skuPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 type productVariant struct {
 	ID                  int64    `json:"id"`
+	Code                string   `json:"code"`
 	SKU                 string   `json:"sku"`
+	Size                string   `json:"size"`
 	PriceMinor          int64    `json:"priceMinor"`
 	CompareAtPriceMinor *int64   `json:"compareAtPriceMinor"`
 	IsActive            bool     `json:"isActive"`
@@ -31,12 +33,15 @@ type productVariant struct {
 
 type productRecord struct {
 	ID               int64            `json:"id"`
+	Code             string           `json:"code"`
 	Revision         int64            `json:"revision"`
 	Slug             string           `json:"slug"`
 	Name             string           `json:"name"`
 	Description      string           `json:"description"`
 	CategoryID       int64            `json:"categoryId"`
 	CategoryName     string           `json:"categoryName"`
+	AudienceName     string           `json:"audienceName"`
+	ColorName        string           `json:"colorName"`
 	BrandID          int64            `json:"brandId"`
 	BrandName        string           `json:"brandName"`
 	Status           string           `json:"status"`
@@ -124,14 +129,20 @@ func readProducts(ctx context.Context, pool *pgxpool.Pool, public bool) ([]produ
 		return nil, err
 	}
 	defer tx.Rollback(context.Background())
-	query := `SELECT p.id, p.revision, p.slug, p.name, COALESCE(p.description, ''),
-		p.category_id, c.name, COALESCE(p.brand_id, 0), COALESCE(b.name, ''),
+	query := `SELECT p.id, p.code, p.revision, p.slug, p.name, COALESCE(p.description, ''),
+		COALESCE(p.category_id, 0), COALESCE(c.name, ''),
+		COALESCE(a.name, ''), COALESCE(color.name, ''),
+		COALESCE(p.brand_id, 0), COALESCE(b.name, ''),
 		p.status, p.is_featured, p.deleted_at IS NOT NULL FROM products p
-		JOIN categories c ON c.id=p.category_id
+		LEFT JOIN categories c ON c.id=p.category_id
+		LEFT JOIN categories a ON a.id=p.audience_category_id
+		LEFT JOIN colors color ON color.id=p.color_id
 		LEFT JOIN brands b ON b.id=p.brand_id AND b.deleted_at IS NULL`
 	if public {
 		query += ` WHERE p.status='active' AND p.deleted_at IS NULL
-			AND c.deleted_at IS NULL AND EXISTS (
+			AND (c.id IS NULL OR c.deleted_at IS NULL)
+			AND (a.id IS NULL OR a.deleted_at IS NULL)
+			AND (color.id IS NULL OR color.deleted_at IS NULL) AND EXISTS (
 			SELECT 1 FROM product_variants v WHERE v.product_id=p.id
 			AND v.is_active AND v.deleted_at IS NULL
 			AND NOT EXISTS (SELECT 1 FROM variant_option_values vov
@@ -149,12 +160,15 @@ func readProducts(ctx context.Context, pool *pgxpool.Pool, public bool) ([]produ
 	ids := []int64{}
 	for rows.Next() {
 		var item productRecord
-		if err := rows.Scan(&item.ID, &item.Revision, &item.Slug, &item.Name,
-			&item.Description, &item.CategoryID, &item.CategoryName, &item.BrandID,
+		var code int64
+		if err := rows.Scan(&item.ID, &code, &item.Revision, &item.Slug, &item.Name,
+			&item.Description, &item.CategoryID, &item.CategoryName,
+			&item.AudienceName, &item.ColorName, &item.BrandID,
 			&item.BrandName, &item.Status, &item.IsFeatured, &item.IsDeleted); err != nil {
 			rows.Close()
 			return nil, err
 		}
+		item.Code = fmt.Sprintf("%04d", code)
 		item.ProductOptionIDs = []int64{}
 		item.ProductLabels = []string{}
 		item.Variants = []productVariant{}
@@ -201,7 +215,8 @@ func readProducts(ctx context.Context, pool *pgxpool.Pool, public bool) ([]produ
 		return nil, err
 	}
 
-	variantQuery := `SELECT v.id, v.product_id, v.sku, v.price_minor, v.compare_at_price_minor,
+	variantQuery := `SELECT v.id, v.product_id, v.code, v.sku, v.size_label,
+		v.price_minor, v.compare_at_price_minor,
 		v.is_active, v.option_signature, v.deleted_at IS NOT NULL
 		FROM product_variants v WHERE v.product_id=ANY($1)`
 	if public {
@@ -221,7 +236,7 @@ func readProducts(ctx context.Context, pool *pgxpool.Pool, public bool) ([]produ
 	for rows.Next() {
 		var variant productVariant
 		var productID int64
-		if err := rows.Scan(&variant.ID, &productID, &variant.SKU, &variant.PriceMinor,
+		if err := rows.Scan(&variant.ID, &productID, &variant.Code, &variant.SKU, &variant.Size, &variant.PriceMinor,
 			&variant.CompareAtPriceMinor, &variant.IsActive, &variant.optionSignature, &variant.IsDeleted); err != nil {
 			rows.Close()
 			return nil, err

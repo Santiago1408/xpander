@@ -1,6 +1,6 @@
 # Vocabulario administrable del catálogo
 
-El propietario puede abrir `/admin/catalogo/vocabulario` para crear y editar categorías, marcas, atributos y sus opciones. Los datos se guardan en las tablas de la migración `002_catalog.sql`; esta etapa no añade migraciones ni valores predeterminados.
+Este es el módulo anterior del catálogo. El propietario todavía puede abrir `/admin/catalogo/vocabulario` para consultar o corregir categorías, marcas, atributos y opciones de fichas anteriores. Para productos nuevos, usa [la ficha única](07-productos-y-catalogo.md): estilo, público, marca y color se crean allí y las tallas se escriben directamente. Los datos anteriores se conservan por compatibilidad.
 
 ## Cómo organizar los atributos
 
@@ -12,7 +12,7 @@ El propietario puede abrir `/admin/catalogo/vocabulario` para crear y editar cat
 
 El propietario decide los nombres y valores. No se crean categorías, tallas, colores ni valores de público automáticamente. Los identificadores técnicos (`slug` y `code`) se sugieren a partir del nombre y el servidor les añade un sufijo si el valor automático ya existe. Se pueden modificar desde el panel. Usan letras minúsculas, números, guion o guion bajo; empiezan con una letra y tienen entre 2 y 64 caracteres. El alcance `product` o `variant` de un atributo queda fijo: cambiarlo después de crear productos podría alterar el significado de sus variantes.
 
-Cada registro se puede renombrar, desactivar o enviar a la papelera y restaurar. La papelera conserva sus referencias históricas y el estado activo anterior; no borra físicamente. La creación de productos ofrece solo categorías, marcas y opciones activas que no estén en la papelera, y la API vuelve a verificarlo antes de guardar.
+Cada registro anterior se puede renombrar, desactivar o enviar a la papelera y restaurar. La papelera conserva sus referencias históricas y el estado activo anterior; no borra físicamente. El formulario nuevo sugiere valores activos y fuera de la papelera, o crea valores nuevos al guardar.
 
 ## Prueba local
 
@@ -24,4 +24,4 @@ Con el entorno arrancado y una sesión de propietario, entra en `/admin/catalogo
 4. Renombra una opción y desactívala. Recarga la página: debe conservar el nuevo nombre y aparecer inactiva.
 5. Intenta crear otra categoría con el mismo identificador: la API debe responder con un conflicto y el panel debe mostrar el error.
 
-Solo las sesiones con rol `owner` pueden consultar o modificar este módulo. Las escrituras también exigen el origen configurado en la API. Las [fichas y variantes](07-productos-y-catalogo.md) ya utilizan este vocabulario.
+Solo las sesiones con rol `owner` pueden consultar o modificar este módulo. Las escrituras también exigen el origen configurado en la API. El formulario nuevo reemplaza las opciones anteriores por tallas simples cuando se edita una ficha previa desde él.

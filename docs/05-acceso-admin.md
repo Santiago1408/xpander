@@ -11,7 +11,7 @@ sudo docker compose -f compose.dev.yaml up --build -d
 sudo docker compose -f compose.dev.yaml --profile setup run --rm bootstrap
 ```
 
-El segundo comando requiere una terminal interactiva. Solicita dos veces la contraseña **sin mostrarla ni recibirla como argumento o variable de entorno**, luego pide el nombre de usuario, nombre visible y datos de la sucursal. Usa una frase de contraseña única de al menos 15 caracteres y un usuario en minúsculas de 3 a 32 caracteres (letras, números, `_` y `-`, comenzando con letra). No compartas la contraseña en el chat, capturas ni archivos. El proceso crea la cuenta `owner` y la sucursal en una sola transacción y se niega a crear otro propietario si ya existe uno.
+El segundo comando requiere una terminal interactiva. Solicita dos veces la contraseña **sin mostrarla ni recibirla como argumento o variable de entorno**, luego pide el nombre de usuario, nombre visible y datos de la sucursal. La única regla de composición es tener más de 6 caracteres (con un límite técnico de 1024 bytes); se recomienda una contraseña larga y única. El usuario va en minúsculas, tiene de 3 a 32 caracteres (letras, números, `_` y `-`, comenzando con letra). No compartas la contraseña en el chat, capturas ni archivos. El proceso crea la cuenta `owner` y la sucursal en una sola transacción y se niega a crear otro propietario si ya existe uno.
 
 Inicia Next.js en otra terminal:
 

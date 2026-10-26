@@ -69,6 +69,9 @@ func run() error {
 	registerLandingRoutes(mux, pool, admin, mediaDir)
 	registerVocabularyRoutes(mux, pool, admin)
 	registerProductRoutes(mux, pool, admin)
+	registerQuickCatalogRoutes(mux, pool, admin)
+	registerTrashRoutes(mux, pool, admin, mediaDir)
+	registerInventoryRoutes(mux, pool, admin)
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           mux,

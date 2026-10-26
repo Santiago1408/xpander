@@ -1,32 +1,39 @@
-# Productos, variantes y catálogo público
+# Productos, tallas y catálogo público
 
-La migración `007_product_revision.sql` añade `products.revision` para rechazar guardados realizados desde una ficha desactualizada. No crea productos ni modifica precios existentes.
+## Registro en una pantalla
 
-## Panel de productos
+En `/admin/catalogo/productos` se registra el producto completo: nombre, descripción, estilo, público, marca, color, imágenes, tallas, precios, oferta opcional y stock inicial. El nombre, estilo, público, marca, color y tallas se guardan en mayúsculas; **la descripción conserva la escritura del administrador**. El producto representa un solo color. Para vender la misma prenda en otro color, se crea otro producto.
 
-Desde `/admin/catalogo/productos`, el propietario puede crear y editar fichas. Cada producto tiene categoría, marca opcional, nombre, descripción, atributos de producto, estado (`draft`, `active` o `archived`), indicador de destacado y hasta 12 imágenes. Las imágenes usan el mismo volumen persistente `media_data` del editor de la landing.
+Estilo y público son categorías diferentes y opcionales. Marca y color también son opcionales. Al escribir un valor nuevo, se crea durante el guardado de la ficha; si ya existe uno equivalente, se reutiliza. La comparación ignora mayúsculas, tildes y espacios. Las sugerencias evitan tener que gestionar esas listas antes de crear un producto. El desplegable «Corregir valores…» permite enviar valores erróneos a la papelera. «Etiquetas» solo era una forma informal de llamar a estos valores descriptivos; **no existe un campo adicional de etiquetas**.
 
-El identificador del producto (`slug`) se sugiere desde el nombre y puede modificarse. Queda reservado para una futura dirección individual; por ahora las fichas se muestran como tarjetas en `/catalogo`. «Destacado» cambia el orden y muestra una etiqueta dentro de ese catálogo; todavía no inserta automáticamente el producto en la landing.
+Cada producto tiene al menos una talla. Con una sola variante, la talla es `ÚNICA` y no se edita. Al añadir otras variantes se escribe una talla distinta para cada una, en cualquier sistema de tallas. No se permite repetir una talla con otra escritura equivalente dentro del mismo producto. Cada variante tiene precio normal y, opcionalmente, un precio de oferta menor. No se piden SKU ni combinaciones de atributos al administrador.
 
-Cada variante tiene un SKU único generado por el servidor, precio de venta en bolivianos y una combinación de opciones de atributos de variante. El administrador no escribe ni modifica el SKU. El formulario convierte el precio a centavos enteros y la API valida el entero recibido; rechaza combinaciones duplicadas y exige que todas las variantes de un producto utilicen el mismo conjunto de atributos. Una ficha activa necesita al menos una variante activa con precio mayor a cero. El administrador puede añadir variantes y cambiar precios o estado activo de las existentes. Para corregir una combinación errónea, se crea otra variante y se envía la anterior a la papelera.
+El identificador de texto (`slug`) se sugiere a partir del nombre y puede corregirse. Se reserva para una futura URL individual. No es el código de inventario.
 
-Los productos se guardan en una transacción. La API comprueba el rol `owner`, el origen de las escrituras y la revisión vigente antes de modificar el producto. Las variantes existentes permanecen en la ficha para conservar su historial; pueden desactivarse o enviarse a la papelera y restaurarse. Las categorías, marcas y opciones nuevas deben estar activas; las ya asociadas pueden mantenerse aunque después se desactiven en el vocabulario.
+## Códigos automáticos
 
-## Catálogo público
+La migración `010_quick_product_entry.sql` asigna un **código de producto de cuatro dígitos** (`0001` a `9999`) y un **código de variante de seis dígitos**. Los primeros cuatro dígitos de cada variante son el código de producto; los últimos dos son un consecutivo (`01` a `99`). Por ejemplo, `0042` identifica el producto y `004201`, `004202` sus tallas. El número se asigna en PostgreSQL y nunca se reutiliza cuando una ficha o talla se elimina. Esto deja margen para 5000 productos, siempre que no se agoten códigos por creaciones de prueba, reintentos fallidos o eliminaciones. Los códigos existentes se asignan por orden de ID al aplicar la migración.
 
-`/catalogo` muestra solo fichas `active` fuera de la papelera con al menos una variante activa visible. Presenta categoría, marca, descripción, características, imágenes, variantes y precio en BOB. Los borradores, archivados y elementos en la papelera no aparecen. La primera imagen de la ficha es la principal; su URL pública solo es accesible mientras esté asociada a un producto activo o a una publicación de la landing. Una categoría o atributo de variante en la papelera puede ocultar las fichas que dependen de él hasta su restauración.
+El SKU anterior se conserva internamente para compatibilidad con los pedidos e inventario existentes, pero la interfaz usa el código numérico. El administrador no lo escribe ni lo modifica.
 
-El catálogo no muestra existencias todavía. La disponibilidad debe confirmarse en la tienda hasta que estén implementados el inventario y el carrito. No hay botón para generar pedidos en esta etapa.
+## Inventario e imágenes
 
-Crear una ficha y sus variantes **no registra existencias ni costo de compra**. Las tablas `stock_movements` y `branch_stock` ya existen, pero todavía no hay endpoints ni interfaz para cargar el inventario inicial. Ese paso requiere un flujo propio que registre sucursal, variante, cantidad, costo y responsable mediante movimientos auditables.
+Una entrada de stock requiere sucursal, cantidad y costo de compra unitario. En un producto nuevo es el stock inicial; al editar uno existente, la cantidad se **suma** al saldo mediante un movimiento de compra. Dejar la cantidad vacía o en cero no altera el inventario. Para corregir o reducir existencias se usa el [panel de inventario](09-inventario-y-qr.md), que conserva el historial de ajustes. Los precios y costos se capturan en bolivianos y se guardan como centavos enteros.
 
-## Prueba local
+Se pueden subir imágenes desde la ficha o elegirlas del banco. Subir una imagen la incorpora primero al banco; guardar el producto la asocia con la ficha. La primera imagen es la principal. Una carga abandonada puede dejar una imagen sin usar en el banco, desde donde se puede reutilizar o enviar a la papelera.
 
-1. Reconstruye la API y aplica la migración: `sudo docker compose -f compose.dev.yaml up --build -d`.
-2. Inicia Next con `npm run dev` y entra como propietario.
-3. En `/admin/catalogo/vocabulario`, crea una categoría y, si quieres, un atributo de variante con dos opciones.
-4. En `/admin/catalogo/productos`, crea una ficha en borrador con una variante y precio. Comprueba que el SKU aparezca tras guardar y que la ficha no se vea en `/catalogo`.
-5. Cambia su estado a **Activo**, guarda y actualiza `/catalogo`. Debe aparecer con su precio. Sube una imagen y guarda de nuevo para verla allí.
-6. Añade otra variante con una combinación distinta. Intenta repetir la combinación: la API debe rechazarla. Desactiva la ficha y comprueba que desaparezca del catálogo público.
+El guardado de producto, tallas, referencias a imágenes y entradas de stock se hace en una transacción. La API comprueba sesión de propietario, origen y revisión para rechazar cambios hechos sobre una ficha desactualizada. La clave de solicitud de una ficha nueva evita duplicarla si se reintenta tras una respuesta perdida.
 
-Antes de almacenar mercancía real, el siguiente paso será registrar movimientos de inventario por sucursal y variante. Después se conectará el carrito con los pedidos persistentes y WhatsApp.
+## Catálogo público y datos anteriores
+
+`/catalogo` muestra fichas activas fuera de la papelera con al menos una variante activa. Presenta imagen, código, nombre, descripción, estilo, público, color, marca, tallas y precios en BOB. Los borradores y archivados no se muestran. «Destacado» modifica el orden y añade una señal dentro del catálogo; aún no inserta automáticamente el producto en la landing. Las existencias no aparecen todavía en el catálogo público, y todavía no hay carrito ni generación de pedidos desde la página.
+
+Las tablas anteriores de atributos y opciones se conservan para leer datos históricos. Las categorías anteriores pasan a ser de estilo; si alguna representaba público, habrá que revisarla al editar la ficha. Al guardar una ficha anterior desde el formulario nuevo, sus opciones de atributos anteriores se sustituyen por el modelo simple de tallas y valores del nuevo formulario. Revísala antes de guardarla. La papelera conserva productos y variantes cuando existen referencias históricas; su eliminación definitiva puede estar bloqueada por pedidos o inventario.
+
+## Verificación local
+
+1. Aplica la migración y reconstruye la API con `sudo docker compose -f compose.dev.yaml up --build -d`. Comprueba que aparezca la versión `010` en `schema_migrations` y que `migrate` termine sin errores.
+2. Abre `/admin/catalogo/productos` como propietario. Crea un producto con nombre mixto, descripción con minúsculas, estilo, público, marca y color nuevos. Añade una sola talla, precio, sucursal, stock y costo. Guarda. El nombre y los valores deben verse en mayúsculas; la descripción debe conservar las minúsculas; la talla debe ser `ÚNICA`.
+3. Comprueba que el producto tiene código de cuatro dígitos, la talla código de seis, y la entrada aparece en `/admin/inventario` con cantidad y costo. Vuelve a abrir la ficha: el campo de stock debe estar vacío, porque una nueva cantidad sería otra entrada.
+4. Añade dos tallas distintas y precios de oferta. Repite una talla con distinta capitalización o acento: debe rechazarse. Verifica que los códigos antiguos no cambian y que los nuevos siguen la numeración del producto.
+5. Escribe de nuevo una marca o categoría cambiando acentos, espacios o mayúsculas. Debe reutilizar el valor anterior. Pon la ficha en borrador y comprueba que desaparece de `/catalogo`; vuelve a activarla y revisa sus precios e imágenes.

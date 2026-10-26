@@ -1,18 +1,18 @@
 import Link from "next/link";
-import ProductsEditor from "./products-editor";
+import QuickProductEditor from "./quick-product-editor";
 
 export default function ProductsPage() {
   return (
     <div className="space-y-7">
       <div>
         <Link className="text-sm text-zinc-600 underline" href="/admin">← Panel</Link>
-        <h1 className="mt-4 text-3xl font-semibold">Productos y variantes</h1>
+        <h1 className="mt-4 text-3xl font-semibold">Productos</h1>
         <p className="mt-2 max-w-3xl text-zinc-600">
-          Crea fichas en borrador, agrega combinaciones vendibles y publícalas en el catálogo.
-          Las existencias se gestionarán en el módulo de inventario.
+          Registra el producto, sus tallas, precios, imágenes y stock inicial desde esta pantalla.
+          Los valores nuevos de estilo, público, marca y color se guardan automáticamente.
         </p>
       </div>
-      <ProductsEditor />
+      <QuickProductEditor />
     </div>
   );
 }

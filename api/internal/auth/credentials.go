@@ -23,7 +23,7 @@ const (
 )
 
 var (
-	ErrPasswordLength = errors.New("password must contain at least 15 characters and at most 1024 bytes")
+	ErrPasswordLength = errors.New("password must contain at least 7 characters and at most 1024 bytes")
 	usernamePattern   = regexp.MustCompile(`^[a-z][a-z0-9_-]{2,31}$`)
 	argonParams       = regexp.MustCompile(`^m=([0-9]+),t=([0-9]+),p=([0-9]+)$`)
 )
@@ -33,7 +33,7 @@ func ValidUsername(value string) bool {
 }
 
 func HashPassword(password string) (string, error) {
-	if !utf8.ValidString(password) || utf8.RuneCountInString(password) < 15 || len(password) > 1024 {
+	if !utf8.ValidString(password) || utf8.RuneCountInString(password) < 7 || len(password) > 1024 {
 		return "", ErrPasswordLength
 	}
 	salt := make([]byte, 16)

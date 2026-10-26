@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useState, type FormEvent } from "react";
+import TrashActions, { type TrashRef } from "../papelera/trash-actions";
 
 type MediaItem = { id: number; url: string; altText: string; isDeleted: boolean; useCount: number };
 
@@ -12,6 +13,7 @@ export default function MediaLibrary() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [trashed, setTrashed] = useState<TrashRef | null>(null);
 
   async function refresh() {
     const response = await fetch("/api/admin/media", { cache: "no-store" });
@@ -61,7 +63,8 @@ export default function MediaLibrary() {
         { method: item.isDeleted ? "POST" : "DELETE" });
       if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo cambiar la papelera.");
       await refresh();
-      setNotice(item.isDeleted ? "Imagen restaurada." : "Imagen enviada a la papelera.");
+      setTrashed(item.isDeleted ? null : { kind: "media", id: item.id, label: item.altText || `Imagen ${item.id}` });
+      setNotice(item.isDeleted ? "Imagen restaurada." : "");
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "No se pudo completar la acción.");
     } finally {
@@ -85,6 +88,7 @@ export default function MediaLibrary() {
       </form>
       {error && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
       {notice && <p className="rounded-lg bg-green-50 p-4 text-sm text-green-800" role="status">{notice}</p>}
+      {trashed && <TrashActions item={trashed} notice onChanged={() => window.location.reload()} />}
       {!items ? <p>Cargando imágenes…</p> : items.length === 0 ? <p>Todavía no hay imágenes.</p> : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item) => <article className={`rounded-xl border border-zinc-200 bg-white p-3 ${item.isDeleted ? "opacity-60" : ""}`} key={item.id}>

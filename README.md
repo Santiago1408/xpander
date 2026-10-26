@@ -23,8 +23,9 @@ La [guía del editor de la landing](docs/04-editor-landing.md) explica cómo edi
 
 La [guía de acceso administrativo](docs/05-acceso-admin.md) explica cómo crear la primera cuenta y sucursal y probar `/admin` sin poner contraseñas en el repositorio.
 
-El [vocabulario del catálogo](docs/06-vocabulario-catalogo.md) ya se puede gestionar desde el panel: categorías, marcas, atributos y opciones, sin listas predefinidas.
+La ficha de producto crea o reutiliza estilo, público, marca y color desde la misma pantalla. El [vocabulario anterior](docs/06-vocabulario-catalogo.md) permanece para fichas previas.
 
 La [guía de productos](docs/07-productos-y-catalogo.md) describe cómo crear fichas y variantes, y cómo comprobar su publicación en `/catalogo`.
 
 El [banco de imágenes y la papelera](docs/08-identificadores-y-papelera.md) permiten reutilizar imágenes y restaurar elementos retirados del panel.
+El [inventario inicial y la evaluación del QR](docs/09-inventario-y-qr.md) describen la carga por variante y las condiciones para añadir pagos manuales.

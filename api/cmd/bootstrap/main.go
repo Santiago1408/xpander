@@ -45,7 +45,7 @@ func run() error {
 		return errors.New("ya existe un propietario; no se creó ningún usuario")
 	}
 
-	fmt.Print("Contraseña del propietario (mínimo 15 caracteres): ")
+	fmt.Print("Contraseña del propietario (más de 6 caracteres): ")
 	passwordBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Println()
 	if err != nil {
@@ -65,7 +65,7 @@ func run() error {
 	passwordHash, err := auth.HashPassword(string(passwordBytes))
 	if err != nil {
 		if errors.Is(err, auth.ErrPasswordLength) {
-			return errors.New("la contraseña debe tener al menos 15 caracteres y como máximo 1024 bytes")
+			return errors.New("la contraseña debe tener más de 6 caracteres (máximo técnico: 1024 bytes)")
 		}
 		return err
 	}

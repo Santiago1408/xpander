@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import LandingSections, { type LandingMedia, type LandingSection } from "../../../landing-sections";
+import TrashActions, { type TrashRef } from "../papelera/trash-actions";
 
 type DraftSection = LandingSection & {
   id: number;
@@ -36,6 +37,7 @@ export default function LandingEditor() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [trashed, setTrashed] = useState<TrashRef | null>(null);
   const [altTexts, setAltTexts] = useState<Record<string, string>>({});
   const [library, setLibrary] = useState<LibraryMedia[]>([]);
   const [selectedMedia, setSelectedMedia] = useState<Record<string, number>>({});
@@ -136,6 +138,29 @@ export default function LandingEditor() {
     return saved;
   }
 
+  async function toggleSectionTrash(index: number) {
+    if (!draft || busy) return;
+    const section = draft.sections[index];
+    if (section.id === 0) {
+      setDraft({ ...draft, sections: draft.sections.filter((_, position) => position !== index) });
+      setDirty(true);
+      setNotice("Se descartó una sección que aún no se había guardado.");
+      return;
+    }
+    setBusy(true); setError(""); setNotice(""); setTrashed(null);
+    try {
+      const updated: Draft = { ...draft, sections: draft.sections.map((item, position) =>
+        position === index ? { ...item, isDeleted: !item.isDeleted } : item) };
+      await save(updated);
+      if (section.isDeleted) setNotice("Sección restaurada en el borrador. Publica para mostrarla a los visitantes.");
+      else setTrashed({ kind: "section", id: section.id, label: section.title || `Sección ${section.id}` });
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "No se pudo guardar la sección.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveClick() {
     if (!draft || busy) return;
     setBusy(true);
@@ -219,6 +244,7 @@ export default function LandingEditor() {
           <p className="mt-2 text-zinc-600">
             Edita libremente el borrador. Los visitantes solo verán los cambios al publicar.
           </p>
+          <p className="mt-1 text-sm text-zinc-500">Enviar una sección a la papelera guarda también los demás cambios pendientes del borrador.</p>
         </div>
         <Link className="rounded-lg border border-zinc-300 px-4 py-2 text-sm" href="/" target="_blank">
           Abrir landing publicada
@@ -279,7 +305,7 @@ export default function LandingEditor() {
                   onClick={() => moveSection(index, 1)} type="button">Bajar</button>
                 <button className="rounded border px-3 py-1" onClick={() => changeSection(index, { isVisible: !section.isVisible })}
                   type="button">{section.isVisible ? "Ocultar" : "Mostrar"}</button>
-                <button className="rounded border px-3 py-1" onClick={() => changeSection(index, { isDeleted: !section.isDeleted })}
+                <button className="rounded border px-3 py-1" onClick={() => void toggleSectionTrash(index)}
                   type="button">{section.isDeleted ? "Restaurar" : "Eliminar"}</button>
               </div>
             </div>
@@ -352,6 +378,7 @@ export default function LandingEditor() {
       </div>
       {error && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
       {notice && <p className="rounded-lg bg-green-50 p-4 text-sm text-green-800" role="status">{notice}</p>}
+      {trashed && <TrashActions item={trashed} notice onChanged={() => window.location.reload()} />}
 
       <div>
         <h2 className="text-xl font-semibold">Vista previa del borrador</h2>

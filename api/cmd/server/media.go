@@ -233,9 +233,13 @@ func (service *landingService) serveStoredMedia(w http.ResponseWriter, r *http.R
 			EXISTS (SELECT 1 FROM page_publication_media WHERE media_id=$1)
 			OR EXISTS (SELECT 1 FROM product_media pm
 				JOIN products p ON p.id=pm.product_id
-				JOIN categories c ON c.id=p.category_id
+				LEFT JOIN categories c ON c.id=p.category_id
+				LEFT JOIN categories a ON a.id=p.audience_category_id
+				LEFT JOIN colors color ON color.id=p.color_id
 				WHERE pm.media_id=$1 AND p.status='active'
-				AND p.deleted_at IS NULL AND c.deleted_at IS NULL
+				AND p.deleted_at IS NULL AND (c.id IS NULL OR c.deleted_at IS NULL)
+				AND (a.id IS NULL OR a.deleted_at IS NULL)
+				AND (color.id IS NULL OR color.deleted_at IS NULL)
 				AND media.deleted_at IS NULL
 				AND EXISTS (SELECT 1 FROM product_variants v
 					WHERE v.product_id=p.id AND v.is_active AND v.deleted_at IS NULL

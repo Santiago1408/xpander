@@ -22,8 +22,11 @@ func TestPasswordRoundTrip(t *testing.T) {
 }
 
 func TestPasswordLength(t *testing.T) {
-	if _, err := HashPassword("short"); err != ErrPasswordLength {
+	if _, err := HashPassword("123456"); err != ErrPasswordLength {
 		t.Fatalf("expected length error, got %v", err)
+	}
+	if _, err := HashPassword("1234567"); err != nil {
+		t.Fatalf("seven characters should be accepted: %v", err)
 	}
 }
 

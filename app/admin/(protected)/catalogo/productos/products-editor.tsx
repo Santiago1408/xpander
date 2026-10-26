@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import { identifierFromName } from "../../../identifier";
+import TrashActions, { type TrashRef } from "../../papelera/trash-actions";
 
 type Option = { id: number; value: string; isActive: boolean; isDeleted: boolean };
 type Attribute = { id: number; name: string; scope: "product" | "variant"; isActive: boolean; isDeleted: boolean; options: Option[] };
@@ -82,6 +83,7 @@ export default function ProductsEditor() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [trashed, setTrashed] = useState<TrashRef | null>(null);
   const [altText, setAltText] = useState("");
 
   useEffect(() => {
@@ -195,7 +197,7 @@ export default function ProductsEditor() {
     }
   }
 
-  async function changeTrash(path: string, method: "DELETE" | "POST", productID: number) {
+  async function changeTrash(path: string, method: "DELETE" | "POST", productID: number, item?: TrashRef) {
     if (busy) return;
     setBusy(true); setError(""); setNotice("");
     try {
@@ -207,7 +209,8 @@ export default function ProductsEditor() {
       setProducts(list);
       const current = list.find((product) => product.id === productID);
       if (current) setDraft(toDraft(current));
-      setNotice(method === "DELETE" ? "Elemento enviado a la papelera." : "Elemento restaurado con su estado anterior.");
+      setTrashed(method === "DELETE" ? item || null : null);
+      setNotice(method === "DELETE" ? "" : "Elemento restaurado con su estado anterior.");
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "No se pudo completar la acción.");
     } finally {
@@ -242,6 +245,7 @@ export default function ProductsEditor() {
       </div>
       {error && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
       {notice && <p className="rounded-lg bg-green-50 p-4 text-sm text-green-800" role="status">{notice}</p>}
+      {trashed && <TrashActions item={trashed} notice onChanged={() => window.location.reload()} />}
       {!draft ? <p className="rounded-xl border border-dashed border-zinc-300 p-10 text-zinc-600">
         {products.length === 0 ? "Todavía no hay productos. Crea el primero." : "Selecciona una ficha o crea un producto."}
       </p> : (
@@ -334,7 +338,8 @@ export default function ProductsEditor() {
                     })} type="button">Quitar</button>}
                     {variant.id > 0 && <button className="text-sm text-red-700 underline" disabled={busy}
                       onClick={() => void changeTrash(`/api/admin/catalog/variants/${variant.id}${variant.isDeleted ? "/restore" : ""}`,
-                        variant.isDeleted ? "POST" : "DELETE", draft.id)} type="button">
+                        variant.isDeleted ? "POST" : "DELETE", draft.id,
+                        { kind: "variant", id: variant.id, label: variant.sku })} type="button">
                       {variant.isDeleted ? "Restaurar variante" : "Eliminar variante"}
                     </button>}
                   </div>
@@ -421,7 +426,8 @@ export default function ProductsEditor() {
             <button className={buttonClass} disabled={busy || draft.isDeleted} type="submit">{busy ? "Guardando…" : "Guardar producto"}</button>
             {draft.id > 0 && <button className="ml-3 text-sm text-red-700 underline" disabled={busy}
               onClick={() => void changeTrash(`/api/admin/catalog/products/${draft.id}${draft.isDeleted ? "/restore" : ""}`,
-                draft.isDeleted ? "POST" : "DELETE", draft.id)} type="button">
+                draft.isDeleted ? "POST" : "DELETE", draft.id,
+                { kind: "product", id: draft.id, label: draft.name })} type="button">
               {draft.isDeleted ? "Restaurar producto" : "Eliminar producto"}
             </button>}
             <span className="ml-3 text-sm text-zinc-500">{draft.id ? `Revisión ${draft.revision}` : "Nuevo producto"}</span>
