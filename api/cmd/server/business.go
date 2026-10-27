@@ -136,9 +136,10 @@ func (service *businessService) update(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.QRMediaID != nil {
 		var kind string
-		err := service.pool.QueryRow(r.Context(), `SELECT kind FROM media WHERE id=$1 AND source_type='local' AND deleted_at IS NULL`, *input.QRMediaID).Scan(&kind)
+		err := service.pool.QueryRow(r.Context(), `SELECT kind FROM media WHERE id=$1 AND source_type='local'
+			AND purpose='qr' AND deleted_at IS NULL`, *input.QRMediaID).Scan(&kind)
 		if errors.Is(err, pgx.ErrNoRows) || kind != "image" {
-			http.Error(w, "selecciona una imagen activa para el QR", http.StatusBadRequest)
+			http.Error(w, "selecciona una imagen QR activa", http.StatusBadRequest)
 			return
 		}
 		if err != nil {

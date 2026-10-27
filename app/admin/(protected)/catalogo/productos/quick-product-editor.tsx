@@ -1,12 +1,12 @@
 "use client";
 
-import Image from "next/image";
+import MediaImage from "../../../../media-image";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import { identifierFromName } from "../../../identifier";
 import TrashActions, { type TrashRef } from "../../papelera/trash-actions";
 
-type Media = { id: number; url: string; altText: string; isDeleted?: boolean };
+type Media = { id: number; url: string; altText: string; isDeleted?: boolean; purpose?: "photo" | "qr" };
 type Branch = { id: number; name: string };
 type Stock = { branchId: number; variantId: number; quantity: number };
 type Inventory = { branches: Branch[]; stock: Stock[] };
@@ -291,8 +291,8 @@ export default function QuickProductEditor() {
             <p className="mt-1 text-sm text-zinc-600">La primera imagen será la principal.</p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3">
               {draft.media.map((media) => <div className="rounded-lg border border-zinc-200 p-2" key={media.id}>
-                <Image alt={media.altText} className="aspect-square w-full rounded object-cover" height={300}
-                  src={media.url} unoptimized width={300} />
+                <MediaImage alt={media.altText} className="aspect-square w-full rounded object-cover" height={300}
+                  sizes="(max-width: 640px) 100vw, 300px" src={media.url} width={300} />
                 <button className="mt-2 text-sm text-red-700 underline" onClick={() => changeDraft({
                   media: draft.media.filter((item) => item.id !== media.id),
                 })} type="button">Quitar de la ficha</button>
@@ -302,14 +302,14 @@ export default function QuickProductEditor() {
               <label className="text-sm">Texto alternativo
                 <input className={inputClass} maxLength={200} onChange={(event) => setAltText(event.target.value)} value={altText} />
               </label>
-              <label className="text-sm">Subir PNG o JPEG
-                <input accept="image/png,image/jpeg" className="mt-1 block text-sm" disabled={draft.media.length >= 12}
+              <label className="text-sm">Subir PNG, JPEG o WebP
+                <input accept="image/png,image/jpeg,image/webp" className="mt-1 block text-sm" disabled={draft.media.length >= 12}
                   onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadImage(file); event.target.value = ""; }} type="file" />
               </label>
               <label className="text-sm">Elegir del banco
                 <select className={inputClass} onChange={(event) => setSelectedMediaId(Number(event.target.value))} value={selectedMediaId}>
                   <option value={0}>Selecciona una imagen</option>
-                  {library.filter((item) => !item.isDeleted && !draft.media.some((used) => used.id === item.id)).map((item) =>
+                  {library.filter((item) => !item.isDeleted && item.purpose !== "qr" && !draft.media.some((used) => used.id === item.id)).map((item) =>
                     <option key={item.id} value={item.id}>{item.altText || `Imagen ${item.id}`}</option>)}
                 </select>
               </label>

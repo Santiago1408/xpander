@@ -23,7 +23,7 @@ type Draft = {
 };
 
 type Publication = { version: number; publishedAt: string; username: string };
-type LibraryMedia = LandingMedia & { isDeleted: boolean };
+type LibraryMedia = LandingMedia & { isDeleted: boolean; purpose?: "photo" | "qr" };
 
 const sectionTypes = [
   { value: "hero", label: "Portada" },
@@ -230,7 +230,7 @@ export default function LandingEditor() {
       data.append("file", file);
       data.append("altText", altTexts[draft.sections[index].key] || draft.sections[index].title);
       const response = await fetch("/api/admin/media", { method: "POST", body: data });
-      if (!response.ok) throw new Error("No se pudo subir la imagen. Usa PNG/JPEG de hasta 8 MB.");
+      if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo subir la imagen. Usa PNG, JPEG o WebP de hasta 8 MiB.");
       const media = (await response.json()) as LandingMedia;
       changeSection(index, { media: [...draft.sections[index].media, media] });
       const mediaResponse = await fetch("/api/admin/media", { cache: "no-store" });
@@ -379,8 +379,8 @@ export default function LandingEditor() {
                     onChange={(event) => setAltTexts((current) => ({ ...current, [section.key]: event.target.value }))}
                     placeholder="Describe la imagen" value={altTexts[section.key] || ""} />
                 </label>
-                <label className="text-sm font-medium">Subir PNG o JPEG
-                  <input accept="image/jpeg,image/png" className="mt-2 block text-sm" disabled={busy}
+                <label className="text-sm font-medium">Subir PNG, JPEG o WebP
+                  <input accept="image/jpeg,image/png,image/webp" className="mt-2 block text-sm" disabled={busy}
                     onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (file) void uploadImage(index, file);
@@ -392,7 +392,7 @@ export default function LandingEditor() {
                     onChange={(event) => setSelectedMedia((current) => ({ ...current, [section.key]: Number(event.target.value) }))}
                     value={selectedMedia[section.key] || 0}>
                     <option value={0}>Selecciona una imagen</option>
-                    {library.filter((item) => !item.isDeleted && !section.media.some((used) => used.id === item.id)).map((item) =>
+                    {library.filter((item) => !item.isDeleted && item.purpose !== "qr" && !section.media.some((used) => used.id === item.id)).map((item) =>
                       <option key={item.id} value={item.id}>{item.altText || `Imagen ${item.id}`}</option>)}
                   </select>
                 </label>

@@ -1,6 +1,6 @@
-import Image from "next/image";
 import Link from "next/link";
 import SocialLinks from "./social-links";
+import MediaImage from "./media-image";
 import type { CatalogProduct } from "./catalogo/catalog-shop";
 
 export type LandingMedia = {
@@ -37,12 +37,12 @@ function Picture({ image, wide = false }: { image: LandingMedia; wide?: boolean 
     </div>;
   }
   return (
-    <Image
+    <MediaImage
       alt={image.altText}
       className={`w-full rounded-xl object-cover ${wide ? "max-h-[34rem]" : "aspect-[4/3]"}`}
       height={wide ? 900 : 600}
+      sizes={wide ? "(max-width: 1024px) 100vw, 50vw" : "(max-width: 640px) 100vw, 50vw"}
       src={image.url}
-      unoptimized
       width={wide ? 1600 : 800}
     />
   );
@@ -141,8 +141,9 @@ export default function LandingSections({ landing, featuredProducts = [] }: {
               {featuredProducts.length === 0 ? <p className="mt-8 text-zinc-500">Aún no hay productos destacados.</p> :
                 <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                   {featuredProducts.map((product) => <article className="overflow-hidden rounded-xl border border-zinc-200 bg-white" key={product.id}>
-                    {product.media[0] ? <Image alt={product.media[0].altText} className="aspect-[4/3] w-full object-cover"
-                      height={600} src={product.media[0].url} unoptimized width={800} /> :
+                    {product.media[0] ? <MediaImage alt={product.media[0].altText} className="aspect-[4/3] w-full object-cover"
+                      height={600} sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      src={product.media[0].url} width={800} /> :
                       <div className="flex aspect-[4/3] items-center justify-center bg-zinc-100 text-zinc-400">XPANDER</div>}
                     <div className="p-5">
                       <h3 className="text-lg font-semibold">{product.name}</h3>

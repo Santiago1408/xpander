@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import MediaImage from "../media-image";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 export type CatalogProduct = {
@@ -307,8 +308,9 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
         const prices = product.variants.map((variant) => variant.priceMinor);
         const lowest = Math.min(...prices);
         return <article className="overflow-hidden rounded-2xl border border-zinc-200 bg-white" id={`producto-${product.id}`} key={product.id}>
-          {product.media[0] ? <Image alt={product.media[0].altText} className="aspect-[4/3] w-full object-cover"
-            height={600} src={product.media[0].url} unoptimized width={800} /> :
+          {product.media[0] ? <MediaImage alt={product.media[0].altText} className="aspect-[4/3] w-full object-cover"
+            height={600} sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
+            src={product.media[0].url} width={800} /> :
             <div className="flex aspect-[4/3] items-center justify-center bg-zinc-100 text-sm tracking-[0.25em] text-zinc-400">XPANDER</div>}
           <div className="p-5">
             <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">

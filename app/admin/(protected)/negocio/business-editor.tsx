@@ -5,7 +5,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { socialPlatforms } from "../../../social-platforms";
 
 type Profile = { phone: string; socialLinks: Record<string, string>; qrMediaId: number | null; qrUrl: string; qrExpiresOn: string };
-type Media = { id: number; altText: string; isDeleted: boolean };
+type Media = { id: number; altText: string; isDeleted: boolean; purpose: "photo" | "qr" };
 
 function dateString(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -45,11 +45,12 @@ export default function BusinessEditor() {
       const form = new FormData();
       form.append("file", file);
       form.append("altText", "Código QR para transferencia bancaria");
+      form.append("purpose", "qr");
       const response = await fetch("/api/admin/media", { method: "POST", body: form });
       if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo subir el QR.");
       const image = (await response.json()) as { id: number; url: string };
       setProfile({ ...profile, qrMediaId: image.id, qrUrl: image.url, qrExpiresOn: suggestedExpiry() });
-      setLibrary((items) => [{ id: image.id, altText: "Código QR para transferencia bancaria", isDeleted: false }, ...items]);
+      setLibrary((items) => [{ id: image.id, altText: "Código QR para transferencia bancaria", isDeleted: false, purpose: "qr" }, ...items]);
       setNotice("QR cargado. Pulsa Guardar cambios para activarlo.");
     } catch (failure) { setError(failure instanceof Error ? failure.message : "No se pudo subir el QR."); }
     finally { setBusy(false); }
@@ -95,8 +96,8 @@ export default function BusinessEditor() {
         {profile.qrMediaId && <Image alt="QR bancario actual" className="mt-4 max-h-64 w-auto rounded-lg border object-contain"
           height={256} src={profile.qrUrl || `/api/admin/media/${profile.qrMediaId}`} unoptimized width={256} />}
         <div className="mt-4 flex flex-wrap items-end gap-4">
-          <label className="text-sm">Subir QR PNG o JPEG
-            <input accept="image/png,image/jpeg" className="mt-2 block text-sm" type="file"
+          <label className="text-sm">Subir QR PNG, JPEG o WebP
+            <input accept="image/png,image/jpeg,image/webp" className="mt-2 block text-sm" type="file"
               onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ""; }} />
           </label>
           <label className="text-sm">Elegir del banco
@@ -107,7 +108,7 @@ export default function BusinessEditor() {
                   qrExpiresOn: id ? suggestedExpiry() : "" });
               }} value={profile.qrMediaId || 0}>
               <option value={0}>Sin QR</option>
-              {library.filter((image) => !image.isDeleted).map((image) => <option key={image.id} value={image.id}>{image.altText || `Imagen ${image.id}`}</option>)}
+              {library.filter((image) => !image.isDeleted && image.purpose === "qr").map((image) => <option key={image.id} value={image.id}>{image.altText || `Imagen ${image.id}`}</option>)}
             </select>
           </label>
           {profile.qrMediaId && <button className="text-sm text-red-700 underline" type="button"

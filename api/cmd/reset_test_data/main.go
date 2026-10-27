@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var uploadedImageName = regexp.MustCompile(`^[a-f0-9]{32}\.(jpg|png)$`)
+var uploadedImageName = regexp.MustCompile(`^[a-f0-9]{32}(?:-(?:thumb|card|detail))?\.(jpg|png|webp)$`)
 var uploadedProofName = regexp.MustCompile(`^[a-f0-9]{32}\.(jpg|png|pdf)$`)
 
 func main() {
@@ -44,8 +44,8 @@ func run() error {
 	}
 	defer conn.Close(context.Background())
 	var version int
-	if err := conn.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version < 20 {
-		return errors.New("apply migration 020 before resetting test data")
+	if err := conn.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version < 21 {
+		return errors.New("apply migration 021 before resetting test data")
 	}
 	tx, err := conn.Begin(ctx)
 	if err != nil {
@@ -57,7 +57,7 @@ func run() error {
 		stock_movements, branch_stock, order_payment_proofs, order_items, orders,
 		product_media, product_variants, products, brands, catalog_terms,
 		page_publication_media, page_publications, page_section_media,
-		page_sections, pages, media, site_settings RESTART IDENTITY`)
+		page_sections, pages, media_variants, media, site_settings RESTART IDENTITY`)
 	if err != nil {
 		return fmt.Errorf("clear catalog, orders, content and inventory: %w", err)
 	}

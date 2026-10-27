@@ -1,10 +1,15 @@
 "use client";
 
-import Image from "next/image";
+import MediaImage from "../../../media-image";
 import { useEffect, useState, type FormEvent } from "react";
 import TrashActions, { type TrashRef } from "../papelera/trash-actions";
 
-type MediaItem = { id: number; url: string; altText: string; isDeleted: boolean; useCount: number };
+type MediaItem = { id: number; url: string; altText: string; isDeleted: boolean;
+  useCount: number; purpose: "photo" | "qr"; bytes: number };
+
+function formatBytes(bytes: number): string {
+  return bytes < 1_000_000 ? `${(bytes / 1_000).toFixed(0)} kB` : `${(bytes / 1_000_000).toFixed(2)} MB`;
+}
 
 export default function MediaLibrary() {
   const [items, setItems] = useState<MediaItem[] | null>(null);
@@ -75,8 +80,8 @@ export default function MediaLibrary() {
   return (
     <div className="space-y-6">
       <form className="flex flex-wrap items-end gap-4 rounded-xl border border-zinc-200 bg-white p-5" onSubmit={(event) => void upload(event)}>
-        <label className="text-sm">Imagen PNG o JPEG *
-          <input accept="image/png,image/jpeg" className="mt-2 block text-sm" id="media-upload-file"
+        <label className="text-sm">Imagen PNG, JPEG o WebP *
+          <input accept="image/png,image/jpeg,image/webp" className="mt-2 block text-sm" id="media-upload-file"
             onChange={(event) => setFile(event.target.files?.[0] || null)} required type="file" />
         </label>
         <label className="min-w-48 flex-1 text-sm">Descripción de la imagen
@@ -92,9 +97,11 @@ export default function MediaLibrary() {
       {!items ? <p>Cargando imágenes…</p> : items.length === 0 ? <p>Todavía no hay imágenes.</p> : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item) => <article className={`rounded-xl border border-zinc-200 bg-white p-3 ${item.isDeleted ? "opacity-60" : ""}`} key={item.id}>
-            <Image alt={item.altText} className="aspect-[4/3] w-full rounded-lg object-cover"
-              height={450} src={item.url} unoptimized width={600} />
+            <MediaImage alt={item.altText} className="aspect-[4/3] w-full rounded-lg object-cover"
+              height={450} sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+              src={item.url} width={600} />
             <p className="mt-3 truncate text-sm font-medium">{item.altText || `Imagen ${item.id}`}</p>
+            <p className="mt-1 text-xs text-zinc-500">{item.purpose === "qr" ? "QR sin pérdida" : "Fotografía"} · {formatBytes(item.bytes)}</p>
             <p className="mt-1 text-xs text-zinc-500">Usos actuales e históricos: {item.useCount}</p>
             {item.isDeleted && <p className="mt-1 text-xs text-red-700">En papelera</p>}
             <button className="mt-3 text-sm text-red-700 underline" disabled={busy}

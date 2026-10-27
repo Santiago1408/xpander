@@ -416,7 +416,8 @@ func (service *landingService) saveDraft(w http.ResponseWriter, r *http.Request)
 		}
 		for mediaIndex, mediaID := range section.MediaIDs {
 			var kind string
-			if err := tx.QueryRow(r.Context(), `SELECT kind FROM media WHERE id=$1`, mediaID).Scan(&kind); err != nil {
+			if err := tx.QueryRow(r.Context(), `SELECT kind FROM media WHERE id=$1
+				AND purpose='photo' AND deleted_at IS NULL`, mediaID).Scan(&kind); err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
 					http.Error(w, "imagen inexistente", http.StatusBadRequest)
 				} else {

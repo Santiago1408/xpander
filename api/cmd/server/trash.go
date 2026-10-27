@@ -272,6 +272,7 @@ func (service *trashService) purge(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(context.Background())
 	var parentID int64
 	var storageKey string
+	var variantKeys []string
 	if kind == "variant" {
 		err := tx.QueryRow(r.Context(), `SELECT p.id FROM products p
 			JOIN product_variants v ON v.product_id=p.id
@@ -348,6 +349,31 @@ func (service *trashService) purge(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if kind == "media" {
+		rows, queryErr := tx.Query(r.Context(), `SELECT storage_key FROM media_variants WHERE media_id=$1`, id)
+		if queryErr != nil {
+			serverError(w, "find image variants", queryErr)
+			return
+		}
+		for rows.Next() {
+			var key string
+			if err := rows.Scan(&key); err != nil {
+				rows.Close()
+				serverError(w, "scan image variant", err)
+				return
+			}
+			if !variantKeyPattern.MatchString(key) {
+				rows.Close()
+				serverError(w, "delete image variant", errors.New("invalid image variant key"))
+				return
+			}
+			variantKeys = append(variantKeys, key)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			serverError(w, "list image variants", err)
+			return
+		}
+		rows.Close()
 		if _, err := tx.Exec(r.Context(), `UPDATE business_profile SET qr_media_id=NULL,
 			qr_expires_on=NULL, updated_at=now() WHERE qr_media_id=$1`, id); err != nil {
 			serverError(w, "detach deleted payment QR", err)
@@ -416,10 +442,12 @@ func (service *trashService) purge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if kind == "media" {
-		if err := os.Remove(filepath.Join(service.mediaDir, storageKey)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			slog.Error("media record deleted but file removal failed", "media_id", id, "storage_key", storageKey, "error", err)
-			http.Error(w, "el registro se borró, pero falló la limpieza del archivo; revisa el servidor", http.StatusInternalServerError)
-			return
+		for _, key := range append([]string{storageKey}, variantKeys...) {
+			if err := os.Remove(filepath.Join(service.mediaDir, key)); err != nil && !errors.Is(err, os.ErrNotExist) {
+				slog.Error("media record deleted but file removal failed", "media_id", id, "storage_key", key, "error", err)
+				http.Error(w, "el registro se borró, pero falló la limpieza de un archivo; revisa el servidor", http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 	w.WriteHeader(http.StatusNoContent)
