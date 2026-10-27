@@ -3,6 +3,7 @@
 import MediaImage from "../../../media-image";
 import { useEffect, useState, type FormEvent } from "react";
 import TrashActions, { type TrashRef } from "../papelera/trash-actions";
+import { EmptyState, Feedback, Pill, ui } from "../../admin-ui";
 
 type MediaItem = { id: number; url: string; altText: string; isDeleted: boolean;
   useCount: number; purpose: "photo" | "qr"; bytes: number };
@@ -19,6 +20,7 @@ export default function MediaLibrary() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [trashed, setTrashed] = useState<TrashRef | null>(null);
+  const [view, setView] = useState("all");
 
   async function refresh() {
     const response = await fetch("/api/admin/media", { cache: "no-store" });
@@ -77,35 +79,49 @@ export default function MediaLibrary() {
     }
   }
 
+  const visible = (items || []).filter((item) => view === "trash" ? item.isDeleted :
+    !item.isDeleted && (view === "all" || item.purpose === view));
+  const totalBytes = (items || []).reduce((sum, item) => sum + item.bytes, 0);
+
   return (
-    <div className="space-y-6">
-      <form className="flex flex-wrap items-end gap-4 rounded-xl border border-zinc-200 bg-white p-5" onSubmit={(event) => void upload(event)}>
-        <label className="text-sm">Imagen PNG, JPEG o WebP *
-          <input accept="image/png,image/jpeg,image/webp" className="mt-2 block text-sm" id="media-upload-file"
+    <div className="flex flex-col gap-5">
+      <form className="grid gap-4 bg-white p-5 sm:p-6 md:grid-cols-[1fr_1fr_auto] md:items-end" onSubmit={(event) => void upload(event)}>
+        <label className={ui.label}>Imagen PNG, JPEG o WebP *
+          <input accept="image/png,image/jpeg,image/webp" className={ui.file} id="media-upload-file"
             onChange={(event) => setFile(event.target.files?.[0] || null)} required type="file" />
+          <span className={ui.hint}>Hasta 8 MiB. Se generan tamaños optimizados al subirla.</span>
         </label>
-        <label className="min-w-48 flex-1 text-sm">Descripción de la imagen
-          <input className="mt-2 block w-full rounded-lg border border-zinc-300 p-2" maxLength={200}
-            onChange={(event) => setAltText(event.target.value)} value={altText} />
+        <label className={ui.label}>Descripción de la imagen
+          <input className={ui.input} maxLength={200} onChange={(event) => setAltText(event.target.value)} placeholder="Texto alternativo" value={altText} />
+          <span className={ui.hint}>Se usa como texto alternativo y rótulo en galerías.</span>
         </label>
-        <button className="rounded-lg bg-zinc-950 px-4 py-2 text-sm text-white disabled:opacity-50"
-          disabled={busy} type="submit">Subir</button>
+        <button className={`${ui.primary} md:mb-6`} disabled={busy || !file} type="submit">{busy ? "Subiendo…" : "Subir imagen"}</button>
       </form>
-      {error && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
-      {notice && <p className="rounded-lg bg-green-50 p-4 text-sm text-green-800" role="status">{notice}</p>}
+      <Feedback error={error} notice={notice} />
       {trashed && <TrashActions item={trashed} notice onChanged={() => window.location.reload()} />}
-      {!items ? <p>Cargando imágenes…</p> : items.length === 0 ? <p>Todavía no hay imágenes.</p> : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((item) => <article className={`rounded-xl border border-zinc-200 bg-white p-3 ${item.isDeleted ? "opacity-60" : ""}`} key={item.id}>
-            <MediaImage alt={item.altText} className="aspect-[4/3] w-full rounded-lg object-cover"
-              height={450} sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-              src={item.url} width={600} />
-            <p className="mt-3 truncate text-sm font-medium">{item.altText || `Imagen ${item.id}`}</p>
-            <p className="mt-1 text-xs text-zinc-500">{item.purpose === "qr" ? "QR sin pérdida" : "Fotografía"} · {formatBytes(item.bytes)}</p>
-            <p className="mt-1 text-xs text-zinc-500">Usos actuales e históricos: {item.useCount}</p>
-            {item.isDeleted && <p className="mt-1 text-xs text-red-700">En papelera</p>}
-            <button className="mt-3 text-sm text-red-700 underline" disabled={busy}
-              onClick={() => void changeTrash(item)} type="button">{item.isDeleted ? "Restaurar" : "Eliminar"}</button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div aria-label="Filtrar imágenes" className="flex flex-wrap gap-1.5" role="group">
+          {[["all", "Activas"], ["photo", "Fotografías"], ["qr", "Códigos QR"], ["trash", "En papelera"]].map(([value, label]) =>
+            <button aria-pressed={view === value} className={ui.chip(view === value)} key={value} onClick={() => setView(value)} type="button">{label}
+              <span className="font-mono text-[11px] opacity-70">{(items || []).filter((item) => value === "trash" ? item.isDeleted : !item.isDeleted && (value === "all" || item.purpose === value)).length}</span></button>)}
+        </div>
+        <span className="font-mono text-xs text-graphite">{items?.length ?? 0} archivos · {formatBytes(totalBytes)}</span>
+      </div>
+      {!items ? <p className="text-sm text-graphite">Cargando imágenes…</p> : visible.length === 0 ? <EmptyState>{items.length === 0 ? "Todavía no hay imágenes." : "No hay imágenes en esta vista."}</EmptyState> : (
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+          {visible.map((item) => <article className={`flex flex-col bg-white ${item.isDeleted ? "opacity-70" : ""}`} key={item.id}>
+            <div className={`relative aspect-[4/5] overflow-hidden ${item.purpose === "qr" ? "bg-white" : "bg-mist"}`}>
+              <MediaImage alt={item.altText} className={`absolute inset-0 h-full w-full ${item.purpose === "qr" ? "object-contain p-4" : "object-cover"}`}
+                height={500} sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 20vw" src={item.url} width={400} />
+              <span className="absolute left-2 top-2 bg-white px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em]">{item.purpose === "qr" ? "QR" : "Foto"}</span>
+            </div>
+            <div className="flex flex-1 flex-col gap-1.5 p-3">
+              <p className="m-0 truncate text-sm font-medium" title={item.altText}>{item.altText || `Imagen ${item.id}`}</p>
+              <p className="m-0 font-mono text-[11px] text-graphite">{formatBytes(item.bytes)} · {item.useCount} uso(s)</p>
+              {item.isDeleted && <Pill tone="danger">En papelera</Pill>}
+              <button className={`${item.isDeleted ? ui.link : ui.dangerLink} mt-auto self-start pt-1`} disabled={busy}
+                onClick={() => void changeTrash(item)} type="button">{item.isDeleted ? "Restaurar" : "Enviar a papelera"}</button>
+            </div>
           </article>)}
         </div>
       )}

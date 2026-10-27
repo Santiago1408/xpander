@@ -47,12 +47,12 @@ export default function LoginForm() {
   return (
     <form className="mt-8 space-y-5" onSubmit={submit}>
       <div>
-        <label className="block text-sm font-medium" htmlFor="username">
+        <label className="block text-[13px] font-medium" htmlFor="username">
           Nombre de usuario *
         </label>
         <input
           autoComplete="username"
-          className="mt-2 w-full rounded-lg border border-zinc-300 px-3 py-3 outline-none focus:border-zinc-950"
+          className="mt-2 h-[52px] w-full border border-line px-3.5 text-[15px] outline-none focus:border-ink"
           id="username"
           maxLength={32}
           name="username"
@@ -61,12 +61,12 @@ export default function LoginForm() {
         />
       </div>
       <div>
-        <label className="block text-sm font-medium" htmlFor="password">
+        <label className="block text-[13px] font-medium" htmlFor="password">
           Contraseña *
         </label>
         <input
           autoComplete="current-password"
-          className="mt-2 w-full rounded-lg border border-zinc-300 px-3 py-3 outline-none focus:border-zinc-950"
+          className="mt-2 h-[52px] w-full border border-line px-3.5 text-[15px] outline-none focus:border-ink"
           id="password"
           name="password"
           required
@@ -74,12 +74,12 @@ export default function LoginForm() {
         />
       </div>
       {error && (
-        <p aria-live="polite" className="text-sm text-red-700" role="alert">
+        <p aria-live="polite" className="border-l-2 border-red-700 bg-red-50 p-3 text-sm text-red-800" role="alert">
           {error}
         </p>
       )}
       <button
-        className="w-full rounded-lg bg-zinc-950 px-4 py-3 font-medium text-white disabled:opacity-50"
+        className="xp-btn h-[52px] w-full bg-ink text-white hover:bg-[#333] disabled:opacity-50"
         disabled={pending}
         type="submit"
       >

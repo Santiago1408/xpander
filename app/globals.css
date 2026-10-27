@@ -1,26 +1,127 @@
 @import "tailwindcss";
 
+/* XPANDER visual system: editorial and monochrome. The theme only changes the
+   "band" surfaces (hero, video, footer): dark bands by default, light on request. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --xp-ink: #141414;
+  --xp-graphite: #5e5e5e;
+  --xp-body: #3d3d3d;
+  --xp-mist: #ededed;
+  --xp-line: #e2e2e2;
+  --xp-soft: #f3f3f3;
+  --xp-white: #ffffff;
+
+  --band: #141414;
+  --band-fg: #ffffff;
+  --band-muted: #bdbdbd;
+  --band-body: #d6d6d6;
+  --band-line: #333333;
+  --band-media: #242424;
+  --band-cta-bg: #ffffff;
+  --band-cta-fg: #141414;
+  --band-logo-filter: brightness(0) invert(1);
+  --band-outline: #333333;
+}
+
+:root[data-theme="light"] {
+  --band: #f3f3f3;
+  --band-fg: #141414;
+  --band-muted: #5e5e5e;
+  --band-body: #3d3d3d;
+  --band-line: #e2e2e2;
+  --band-media: #ffffff;
+  --band-cta-bg: #141414;
+  --band-cta-fg: #ffffff;
+  --band-logo-filter: none;
+  --band-outline: #d0d0d0;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-ink: var(--xp-ink);
+  --color-graphite: var(--xp-graphite);
+  --color-body: var(--xp-body);
+  --color-mist: var(--xp-mist);
+  --color-line: var(--xp-line);
+  --color-soft: var(--xp-soft);
+
+  --color-band: var(--band);
+  --color-band-fg: var(--band-fg);
+  --color-band-muted: var(--band-muted);
+  --color-band-body: var(--band-body);
+  --color-band-line: var(--band-line);
+  --color-band-media: var(--band-media);
+  --color-band-cta-bg: var(--band-cta-bg);
+  --color-band-cta-fg: var(--band-cta-fg);
+
+  --font-sans: var(--font-archivo), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Archivo Expanded 600 for headings. */
+@utility xp-display {
+  font-weight: 600;
+  font-stretch: 125%;
+  text-transform: uppercase;
+}
+
+/* IBM Plex Mono labels: prices, codes and small captions. */
+@utility xp-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+@utility xp-container {
+  width: 100%;
+  margin-inline: auto;
+  max-width: 1440px;
+  padding-inline: clamp(16px, 4vw, 48px);
+}
+
+@utility xp-btn {
+  display: inline-flex;
+  height: 52px;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 28px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+@utility xp-logo-band {
+  filter: var(--band-logo-filter);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--xp-white);
+  color: var(--xp-ink);
+  font-family: var(--font-sans);
+}
+
+.xp-marquee {
+  display: flex;
+  width: max-content;
+  animation: xp-marquee 38s linear infinite;
+}
+
+@keyframes xp-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.xp-card img {
+  transition: transform 0.5s ease;
+}
+
+.xp-card:hover img {
+  transform: scale(1.05);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xp-marquee { animation: none; }
+  .xp-card img, .xp-card:hover img { transition: none; transform: none; }
 }

@@ -76,3 +76,59 @@ func TestOrderMessageContainsPersistedDetails(t *testing.T) {
 		t.Fatal("invalid WhatsApp URL")
 	}
 }
+
+func TestCheckoutDeliveryMethod(t *testing.T) {
+	input := sampleCheckout()
+	if err := normalizeCheckout(&input); err != nil || input.DeliveryMethod != "pickup" {
+		t.Fatalf("missing delivery method should default to pickup: %q %v", input.DeliveryMethod, err)
+	}
+	pickup := checkoutFingerprint(input)
+	legacy := sampleCheckout()
+	_ = normalizeCheckout(&legacy)
+	legacy.DeliveryMethod = ""
+	if checkoutFingerprint(legacy) != pickup {
+		t.Fatal("pickup orders must keep the fingerprint used before delivery existed")
+	}
+	input.DeliveryMethod = "delivery"
+	if checkoutFingerprint(input) == pickup {
+		t.Fatal("changing the delivery method must not reuse a request key")
+	}
+	invalid := sampleCheckout()
+	invalid.DeliveryMethod = "courier"
+	if err := normalizeCheckout(&invalid); err == nil {
+		t.Fatal("unknown delivery method accepted")
+	}
+}
+
+func TestDeliveryOrderMessage(t *testing.T) {
+	input := sampleCheckout()
+	input.DeliveryMethod = "delivery"
+	input.PaymentMethod = "qr"
+	_ = normalizeCheckout(&input)
+	message := buildOrderMessage(7, input, pickupBranch{Name: "CENTRO", Address: "CALLE 1"},
+		[]orderLine{{ProductName: "POLERA", VariantLabel: "M", UnitPrice: 12000, Quantity: 1}}, 12000)
+	for _, part := range []string{"envío del pedido XP-000007", "envío a domicilio", "despacha: CENTRO", "solo los productos"} {
+		if !strings.Contains(message, part) {
+			t.Fatalf("delivery message missing %q: %s", part, message)
+		}
+	}
+	if strings.Contains(message, "recojo") {
+		t.Fatalf("delivery message mentions pickup: %s", message)
+	}
+}
+
+func TestOrderCancellationRules(t *testing.T) {
+	cases := []struct {
+		status, payment string
+		allowed         bool
+	}{
+		{"pending", "not_required", true}, {"pending", "awaiting_receipt", true},
+		{"pending", "submitted", true}, {"pending", "rejected", true},
+		{"pending", "verified", false}, {"confirmed", "verified", false}, {"confirmed", "not_required", false},
+	}
+	for _, item := range cases {
+		if err := cancellable(item.status, item.payment); (err == nil) != item.allowed {
+			t.Fatalf("cancellable(%s, %s) = %v", item.status, item.payment, err)
+		}
+	}
+}

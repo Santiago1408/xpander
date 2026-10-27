@@ -30,6 +30,8 @@ type adminOrder struct {
 	TotalMinor       int64            `json:"totalMinor"`
 	CreatedAt        time.Time        `json:"createdAt"`
 	ConfirmedAt      *time.Time       `json:"confirmedAt"`
+	CancelledAt      *time.Time       `json:"cancelledAt"`
+	DeliveryMethod   string           `json:"deliveryMethod"`
 	PaymentMethod    string           `json:"paymentMethod"`
 	PaymentStatus    string           `json:"paymentStatus"`
 	HasReceipt       bool             `json:"hasReceipt"`
@@ -65,7 +67,7 @@ func (service *orderService) listAdmin(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(context.Background())
 	rows, err := tx.Query(r.Context(), `SELECT id, status, customer_name, customer_phone,
 		COALESCE(customer_note,''), pickup_branch_name, COALESCE(pickup_address,''),
-		total_minor, created_at, confirmed_at, payment_method, payment_status,
+		total_minor, created_at, confirmed_at, cancelled_at, delivery_method, payment_method, payment_status,
 		EXISTS (SELECT 1 FROM order_payment_proofs op WHERE op.order_id=orders.id)
 		FROM orders ORDER BY created_at DESC, id DESC LIMIT 100`)
 	if err != nil {
@@ -80,7 +82,7 @@ func (service *orderService) listAdmin(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&item.ID, &item.Status, &item.CustomerName,
 			&item.CustomerPhone, &item.CustomerNote, &item.PickupBranchName,
 			&item.PickupAddress, &item.TotalMinor,
-			&item.CreatedAt, &item.ConfirmedAt, &item.PaymentMethod,
+			&item.CreatedAt, &item.ConfirmedAt, &item.CancelledAt, &item.DeliveryMethod, &item.PaymentMethod,
 			&item.PaymentStatus, &item.HasReceipt); err != nil {
 			rows.Close()
 			serverError(w, "scan order", err)
@@ -222,4 +224,62 @@ func (service *orderService) confirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// cancel closes a pending order before its payment is verified, for example an
+// abandoned QR order. Nothing was debited from stock, so no movement is needed.
+func (service *orderService) cancel(w http.ResponseWriter, r *http.Request) {
+	user, ok := service.requireOwner(w, r)
+	if !ok {
+		return
+	}
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	tx, err := service.pool.Begin(r.Context())
+	if err != nil {
+		serverError(w, "begin order cancellation", err)
+		return
+	}
+	defer tx.Rollback(context.Background())
+	var status, paymentStatus string
+	err = tx.QueryRow(r.Context(), `SELECT status, payment_status FROM orders WHERE id=$1 FOR UPDATE`, id).
+		Scan(&status, &paymentStatus)
+	if errors.Is(err, pgx.ErrNoRows) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		serverError(w, "find order to cancel", err)
+		return
+	}
+	if status == "cancelled" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if err := cancellable(status, paymentStatus); err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	if _, err := tx.Exec(r.Context(), `UPDATE orders SET status='cancelled', cancelled_at=now(),
+		cancelled_by_user_id=$2, updated_at=now() WHERE id=$1`, id, user.ID); err != nil {
+		serverError(w, "cancel order", err)
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		serverError(w, "commit order cancellation", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func cancellable(status, paymentStatus string) error {
+	if status != "pending" {
+		return errors.New("solo se pueden cancelar pedidos pendientes")
+	}
+	if paymentStatus == "verified" {
+		return errors.New("el pago de este pedido ya fue verificado; no se puede cancelar")
+	}
+	return nil
 }

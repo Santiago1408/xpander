@@ -9,7 +9,7 @@ sudo docker compose -f compose.dev.yaml up -d --no-deps --force-recreate api
 sudo docker compose -f compose.dev.yaml exec -T database psql -U xpander -d xpander -c 'SELECT version,name FROM schema_migrations WHERE version >= 14 ORDER BY version;'
 ```
 
-La consulta debe mostrar las migraciones 014 a 020. Inicia Next con `npm run dev` si aún no está abierto.
+La consulta debe mostrar las migraciones 014 a 022. Inicia Next con `npm run dev` si aún no está abierto.
 
 ## 1. Estilos y público
 
@@ -20,9 +20,9 @@ La consulta debe mostrar las migraciones 014 a 020. Inicia Next con `npm run dev
 
 ## 2. Carrito
 
-1. Añade una variante con stock al carrito y registra un pedido. El comprobante y su enlace de WhatsApp deben quedar visibles, mientras el botón flotante muestra `Carrito · 0`.
-2. Cierra y vuelve a abrir el carrito: el comprobante sigue visible durante esa sesión. Recarga `/catalogo`: el carrito continúa vacío.
-3. Si la API rechaza el pedido, el carrito debe conservar sus unidades para que puedas corregirlo y reintentar.
+1. Agrega variantes con el botón «+» de las tarjetas o desde la ficha. El botón flotante muestra las unidades. Ábrelo: el panel lateral muestra el total por producto y el total a pagar.
+2. Si la API rechaza el pedido (precio cambiado o sin stock), el carrito conserva sus unidades para corregirlo y reintentar.
+3. Sin un QR vigente, **Finalizar compra** queda deshabilitado y `/admin` muestra la alerta del QR.
 
 ## 3. Sucursal activa
 

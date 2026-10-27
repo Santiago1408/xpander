@@ -2,7 +2,9 @@
 
 import MediaImage from "../../../../media-image";
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { EmptyState, Feedback, PageHeader, Pill, formatBOB, ui } from "../../../admin-ui";
 import { identifierFromName } from "../../../identifier";
 import TrashActions, { type TrashRef } from "../../papelera/trash-actions";
 
@@ -34,8 +36,7 @@ type Draft = {
   media: Media[]; variants: DraftVariant[];
 };
 
-const inputClass = "mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm";
-const buttonClass = "rounded-lg bg-zinc-950 px-4 py-2 text-sm font-medium text-white disabled:opacity-50";
+const statusLabel = { active: "Activo", draft: "Borrador", archived: "Archivado" } as const;
 
 function upper(value: string) { return value.toLocaleUpperCase("es-BO"); }
 
@@ -81,6 +82,10 @@ function Suggestions({ id, values }: { id: string; values: string[] }) {
 }
 
 export default function QuickProductEditor() {
+  const params = useSearchParams();
+  const [query, setQuery] = useState(params.get("q") || "");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [openedFor, setOpenedFor] = useState<string | null>(null);
   const [products, setProducts] = useState<StoredProduct[]>([]);
   const [options, setOptions] = useState<Options | null>(null);
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -211,220 +216,328 @@ export default function QuickProductEditor() {
     } finally { setBusy(false); }
   }
 
-  if (!options || !inventory) return <p className="text-zinc-600">{error || "Cargando formulario…"}</p>;
+  const liveProducts = products.filter((item) => !item.isDeleted);
+  const filteredProducts = useMemo(() => {
+    const text = query.trim().toLocaleUpperCase("es-BO");
+    return products.filter((item) => !item.isDeleted &&
+      (statusFilter === "all" || (statusFilter === "featured" ? item.isFeatured : item.status === statusFilter)) &&
+      (!text || `${item.code} ${item.name} ${item.color} ${item.style} ${item.audience} ${brands.find((brand) => brand.id === item.brandId)?.name || ""} ${
+        item.variants.map((variant) => variant.code).join(" ")}`.toLocaleUpperCase("es-BO").includes(text)));
+  }, [products, brands, query, statusFilter]);
 
-  return <div className="space-y-6">
-    <div className="flex flex-wrap items-center gap-3">
-      <button className={buttonClass} disabled={busy} onClick={() => {
-        setDraft(blankDraft()); setIdentifierEdited(false); setError(""); setNotice(""); setTrashed(null);
-      }} type="button">+ Nuevo producto</button>
-      <select aria-label="Editar producto" className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm"
-        disabled={busy} onChange={(event) => {
-          const item = products.find((product) => product.id === Number(event.target.value));
-          setDraft(item ? toDraft(item) : null); setIdentifierEdited(true); setError(""); setNotice(""); setTrashed(null);
-        }} value={draft?.id || 0}>
-        <option value={0}>Selecciona un producto para editar</option>
-        {products.filter((item) => !item.isDeleted).map((item) => <option key={item.id} value={item.id}>
-          {item.code} · {item.name}</option>)}
-      </select>
-      <Link className="text-sm underline" href="/admin/catalogo/valores">Administrar marcas, estilos y público</Link>
-      <Link className="text-sm underline" href="/admin/inventario">Ver inventario</Link>
-    </div>
-    {error && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
-    {notice && <p className="rounded-lg bg-green-50 p-4 text-sm text-green-800" role="status">{notice}</p>}
-    {trashed && <TrashActions item={trashed} notice onChanged={() => window.location.reload()} />}
-    {!draft ? <p className="rounded-xl border border-dashed border-zinc-300 p-10 text-zinc-600">Crea un producto o selecciona uno existente.</p> :
-      <form className="space-y-6" onSubmit={(event) => void save(event)}>
-        <fieldset className="space-y-6" disabled={busy}>
-          <section className="rounded-xl border border-zinc-200 bg-white p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold">Producto</h2>
-              <span className="rounded-lg bg-zinc-100 px-3 py-2 text-sm">Código: {draft.code || "Se generará al guardar"}</span>
-            </div>
+  // "+ Nuevo producto" in the top bar opens a blank form through ?nuevo=<timestamp>.
+  const nuevo = params.get("nuevo");
+  if (nuevo && nuevo !== openedFor && options && inventory) {
+    setOpenedFor(nuevo);
+    setDraft(blankDraft()); setIdentifierEdited(false); setError(""); setNotice(""); setTrashed(null);
+  }
+
+  return productScreen();
+
+  // Plain render helpers (not components) so inputs keep focus while typing.
+  function productScreen() {
+    if (!options || !inventory) return <p className="text-sm text-graphite">{error || "Cargando productos…"}</p>;
+    return draft ? productForm() : productList();
+  }
+
+  function openProduct(item: StoredProduct | null) {
+    setDraft(item ? toDraft(item) : blankDraft()); setIdentifierEdited(Boolean(item));
+    setError(""); setNotice(""); setTrashed(null);
+    window.scrollTo({ top: 0 });
+  }
+
+  function productList() {
+    const visible = filteredProducts;
+    return <>
+      <PageHeader actions={<>
+        <Link className={ui.secondary} href="/admin/catalogo/valores">Marcas, estilos y público</Link>
+        <button className={ui.primary} disabled={busy} onClick={() => openProduct(null)} type="button">+ Nuevo producto</button>
+      </>} description="Registra cada producto con sus tallas, precios, imágenes y stock inicial. Cada color es un producto distinto."
+        eyebrow="Catálogo · Productos" title="Productos" />
+      <Feedback error={error} notice={notice} />
+      {trashed && <TrashActions item={trashed} notice onChanged={() => window.location.reload()} />}
+      <section className="bg-white">
+        <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
+          <label className="flex h-10 min-w-[220px] flex-1 items-center gap-2 border border-line px-3 focus-within:border-ink sm:max-w-sm">
+            <svg aria-hidden="true" className="size-4 text-graphite" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
+            <span className="sr-only">Buscar productos</span>
+            <input autoFocus={Boolean(query)} className="min-w-0 flex-1 bg-transparent text-sm outline-none" onChange={(event) => setQuery(event.target.value)}
+              placeholder="Nombre, código, marca o color" type="search" value={query} />
+          </label>
+          <div aria-label="Filtrar por estado" className="flex flex-wrap gap-1.5" role="group">
+            {[["all", "Todos"], ["active", "Activos"], ["draft", "Borradores"], ["archived", "Archivados"], ["featured", "Destacados"]].map(([value, label]) =>
+              <button aria-pressed={statusFilter === value} className={ui.chip(statusFilter === value)} key={value}
+                onClick={() => setStatusFilter(value)} type="button">{label}</button>)}
+          </div>
+          <span className="ml-auto font-mono text-xs text-graphite">{visible.length} de {liveProducts.length}</span>
+        </div>
+        {liveProducts.length === 0 ? <div className="p-6"><EmptyState>Aún no hay productos. Crea el primero con «+ Nuevo producto».</EmptyState></div> :
+          visible.length === 0 ? <p className="p-6 text-sm text-graphite">No hay productos con esta búsqueda o filtro.</p> :
+          <div className="overflow-x-auto"><table className="w-full min-w-[760px] border-collapse text-sm">
+            <thead><tr><th className={ui.th}>Producto</th><th className={ui.th}>Tallas</th><th className={`${ui.th} text-right`}>Precio</th>
+              <th className={`${ui.th} text-right`}>Stock</th><th className={ui.th}>Estado</th><th className={ui.th}><span className="sr-only">Acciones</span></th></tr></thead>
+            <tbody>{visible.map((item) => {
+              const variants = item.variants.filter((variant) => !variant.isDeleted);
+              const prices = variants.map((variant) => variant.priceMinor);
+              const units = inventory!.stock.filter((row) => variants.some((variant) => variant.id === row.variantId))
+                .reduce((sum, row) => sum + row.quantity, 0);
+              return <tr className="hover:bg-soft" key={item.id}>
+                <td className={ui.td}>
+                  <button className="flex items-center gap-3 text-left" onClick={() => openProduct(item)} type="button">
+                    <span className="relative size-12 shrink-0 overflow-hidden bg-mist">
+                      {item.media[0] && <MediaImage alt="" className="absolute inset-0 h-full w-full object-cover" height={48} sizes="48px" src={item.media[0].url} width={48} />}
+                    </span>
+                    <span className="flex flex-col gap-0.5">
+                      <span className="font-medium hover:underline">{item.name}</span>
+                      <span className="text-xs text-graphite"><span className="font-mono">{item.code}</span>{[item.style, item.audience, item.color,
+                        brands.find((brand) => brand.id === item.brandId)?.name].filter(Boolean).map((value) => ` · ${value}`).join("")}</span>
+                    </span>
+                  </button>
+                </td>
+                <td className={`${ui.td} font-mono text-xs`}>{variants.map((variant) => [variant.sizeAlpha, variant.sizeNumeric].filter(Boolean).join("/")).join(", ") || "—"}</td>
+                <td className={`${ui.td} whitespace-nowrap text-right font-mono`}>{prices.length ? formatBOB(Math.min(...prices)) +
+                  (Math.max(...prices) > Math.min(...prices) ? ` – ${formatBOB(Math.max(...prices))}` : "") : "—"}</td>
+                <td className={`${ui.td} text-right font-mono ${units <= 3 ? "text-red-700" : ""}`}>{units}</td>
+                <td className={ui.td}><span className="flex flex-wrap gap-1.5">
+                  <Pill tone={item.status === "active" ? "solid" : item.status === "draft" ? "dashed" : "soft"}>{statusLabel[item.status]}</Pill>
+                  {item.isFeatured && <Pill tone="outline">Destacado</Pill>}
+                </span></td>
+                <td className={`${ui.td} text-right`}><button className={ui.quiet} onClick={() => openProduct(item)} type="button">Editar</button></td>
+              </tr>;
+            })}</tbody>
+          </table></div>}
+      </section>
+    </>;
+  }
+
+  function productForm() {
+    const current = draft!;
+    const libraryChoices = library.filter((item) => !item.isDeleted && item.purpose !== "qr" && !current.media.some((used) => used.id === item.id));
+    return <>
+      <div className="flex flex-col gap-3">
+        <button className="self-start text-sm font-medium text-graphite hover:text-ink" disabled={busy}
+          onClick={() => { setDraft(null); setError(""); setNotice(""); }} type="button">← Volver a productos</button>
+        <PageHeader actions={current.id > 0 && current.status === "active" && current.slug ?
+          <Link className={ui.secondary} href={`/catalogo/${current.slug}`} target="_blank">Ver en la tienda ↗</Link> : undefined}
+          eyebrow={current.id ? `Producto · Código ${current.code}` : "Producto · Nuevo"} title={current.id ? current.name || "Producto" : "Nuevo producto"} />
+      </div>
+      <Feedback error={error} notice={notice} />
+      {trashed && <TrashActions item={trashed} notice onChanged={() => window.location.reload()} />}
+      <form className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]" onSubmit={(event) => void save(event)}>
+        <fieldset className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0" disabled={busy}>
+          <section className={`${ui.card} ${ui.cardPad}`}>
+            <h2 className={ui.cardTitle}>Información</h2>
             <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <label className="text-sm">Nombre *
-                <input className={inputClass} maxLength={120} onChange={(event) => changeDraft({
+              <label className={ui.label}>Nombre *
+                <input className={ui.input} maxLength={120} onChange={(event) => changeDraft({
                   name: upper(event.target.value),
-                  slug: draft.id === 0 && !identifierEdited ? identifierFromName(event.target.value) : draft.slug,
-                })} required value={draft.name} />
+                  slug: current.id === 0 && !identifierEdited ? identifierFromName(event.target.value) : current.slug,
+                })} required value={current.name} />
               </label>
-              <label className="text-sm">Identificador{draft.id > 0 ? " *" : " (generado desde el nombre)"}
-                <input className={inputClass} maxLength={64} minLength={2} onChange={(event) => {
+              <label className={ui.label}>Identificador para la URL{current.id > 0 ? " *" : ""}
+                <input className={`${ui.input} font-mono`} maxLength={64} minLength={2} onChange={(event) => {
                   setIdentifierEdited(true); changeDraft({ slug: event.target.value.toLowerCase() });
-                }} pattern="[a-z][a-z0-9_-]+" required={draft.id > 0} value={draft.slug} />
+                }} pattern="[a-z][a-z0-9_-]+" required={current.id > 0} value={current.slug} />
+                <span className={ui.hint}>{current.id ? `/catalogo/${current.slug || "…"}` : "Se genera desde el nombre; puedes corregirlo."}</span>
               </label>
-              <label className="text-sm md:col-span-2">Descripción (opcional)
-                <textarea className={inputClass} maxLength={10000} onChange={(event) => changeDraft({ description: event.target.value })}
-                  rows={4} value={draft.description} />
+              <label className={`${ui.label} md:col-span-2`}>Descripción (opcional)
+                <textarea className={ui.textarea} maxLength={10000} onChange={(event) => changeDraft({ description: event.target.value })}
+                  rows={4} value={current.description} />
               </label>
-              <label className="text-sm">Estilo de ropa (opcional)
-                <select className={inputClass} onChange={(event) => changeDraft({ style: event.target.value })} value={draft.style}>
+              <label className={ui.label}>Estilo
+                <select className={ui.input} onChange={(event) => changeDraft({ style: event.target.value })} value={current.style}>
                   <option value="">Sin estilo</option>
-                  {options.styles.map((value) => <option key={value} value={value}>{value}</option>)}
+                  {options!.styles.map((value) => <option key={value} value={value}>{value}</option>)}
                 </select>
               </label>
-              <label className="text-sm">Público (opcional)
-                <select className={inputClass} onChange={(event) => changeDraft({ audience: event.target.value })} value={draft.audience}>
+              <label className={ui.label}>Público
+                <select className={ui.input} onChange={(event) => changeDraft({ audience: event.target.value })} value={current.audience}>
                   <option value="">Sin público</option>
-                  {options.audiences.map((value) => <option key={value} value={value}>{value}</option>)}
+                  {options!.audiences.map((value) => <option key={value} value={value}>{value}</option>)}
                 </select>
               </label>
-              <label className="text-sm">Color (opcional)
-                <input className={inputClass} list="color-suggestions" maxLength={120}
+              <label className={ui.label}>Color
+                <input className={ui.input} list="color-suggestions" maxLength={120}
                   onChange={(event) => changeDraft({ color: upper(event.target.value) })}
-                  placeholder="NEGRO" value={draft.color} />
-                <Suggestions id="color-suggestions" values={options.colors} />
+                  placeholder="NEGRO" value={current.color} />
+                <Suggestions id="color-suggestions" values={options!.colors} />
               </label>
-              <label className="text-sm">Marca (opcional)
-                <select className={inputClass} onChange={(event) => changeDraft({ brandId: Number(event.target.value) })}
-                  value={draft.brandId}>
+              <label className={ui.label}>Marca
+                <select className={ui.input} onChange={(event) => changeDraft({ brandId: Number(event.target.value) })} value={current.brandId}>
                   <option value={0}>Sin marca</option>
                   {brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
                 </select>
               </label>
             </div>
-            <p className="mt-3 text-xs text-zinc-500">Los estilos y públicos se administran en su apartado. El color sigue siendo un texto de la ficha; cada color se registra como producto separado.</p>
+            <p className={`${ui.hint} mt-4`}>Los estilos, públicos y marcas se administran en <Link className="underline" href="/admin/catalogo/valores">su apartado</Link>. Cada color se registra como un producto distinto.</p>
           </section>
 
-          <section className="rounded-xl border border-zinc-200 bg-white p-6">
-            <h2 className="text-xl font-semibold">Imágenes</h2>
-            <p className="mt-1 text-sm text-zinc-600">La primera imagen será la principal.</p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-              {draft.media.map((media) => <div className="rounded-lg border border-zinc-200 p-2" key={media.id}>
-                <MediaImage alt={media.altText} className="aspect-square w-full rounded object-cover" height={300}
-                  sizes="(max-width: 640px) 100vw, 300px" src={media.url} width={300} />
-                <button className="mt-2 text-sm text-red-700 underline" onClick={() => changeDraft({
-                  media: draft.media.filter((item) => item.id !== media.id),
-                })} type="button">Quitar de la ficha</button>
+          <section className={`${ui.card} ${ui.cardPad}`}>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className={ui.cardTitle}>Imágenes</h2>
+              <span className="font-mono text-xs text-graphite">{current.media.length} / 12 · la primera es la principal</span>
+            </div>
+            {current.media.length > 0 && <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {current.media.map((media, index) => <div className="flex flex-col gap-2" key={media.id}>
+                <div className="relative aspect-[3/4] overflow-hidden bg-mist">
+                  <MediaImage alt={media.altText} className="absolute inset-0 h-full w-full object-cover" height={400}
+                    sizes="(max-width: 640px) 50vw, 200px" src={media.url} width={300} />
+                  {index === 0 && <span className="absolute left-2 top-2 bg-white px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em]">Principal</span>}
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex gap-1">
+                    <button aria-label="Mover antes" className={ui.quiet} disabled={index === 0} onClick={() => {
+                      const media = [...current.media]; [media[index - 1], media[index]] = [media[index], media[index - 1]]; changeDraft({ media });
+                    }} type="button">←</button>
+                    <button aria-label="Mover después" className={ui.quiet} disabled={index === current.media.length - 1} onClick={() => {
+                      const media = [...current.media]; [media[index + 1], media[index]] = [media[index], media[index + 1]]; changeDraft({ media });
+                    }} type="button">→</button>
+                  </span>
+                  <button className={ui.dangerLink} onClick={() => changeDraft({
+                    media: current.media.filter((item) => item.id !== media.id),
+                  })} type="button">Quitar</button>
+                </div>
               </div>)}
-            </div>
-            <div className="mt-4 flex flex-wrap items-end gap-3">
-              <label className="text-sm">Texto alternativo
-                <input className={inputClass} maxLength={200} onChange={(event) => setAltText(event.target.value)} value={altText} />
-              </label>
-              <label className="text-sm">Subir PNG, JPEG o WebP
-                <input accept="image/png,image/jpeg,image/webp" className="mt-1 block text-sm" disabled={draft.media.length >= 12}
-                  onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadImage(file); event.target.value = ""; }} type="file" />
-              </label>
-              <label className="text-sm">Elegir del banco
-                <select className={inputClass} onChange={(event) => setSelectedMediaId(Number(event.target.value))} value={selectedMediaId}>
-                  <option value={0}>Selecciona una imagen</option>
-                  {library.filter((item) => !item.isDeleted && item.purpose !== "qr" && !draft.media.some((used) => used.id === item.id)).map((item) =>
-                    <option key={item.id} value={item.id}>{item.altText || `Imagen ${item.id}`}</option>)}
-                </select>
-              </label>
-              <button className="rounded-lg border border-zinc-300 px-4 py-2 text-sm" disabled={!selectedMediaId || draft.media.length >= 12}
-                onClick={() => {
-                  const image = library.find((item) => item.id === selectedMediaId && !item.isDeleted);
-                  if (image) changeDraft({ media: [...draft.media, image] });
-                  setSelectedMediaId(0);
-                }} type="button">Agregar imagen</button>
-            </div>
-          </section>
-
-          <section className="rounded-xl border border-zinc-200 bg-white p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-semibold">Tallas, precios e inventario</h2>
-                <p className="mt-1 text-sm text-zinc-600">Cada variante necesita talla alfabética, numérica o ambas. Puedes cargar stock en varias sucursales.</p>
+            </div>}
+            <div className="mt-5 grid gap-4 border-t border-line pt-5 md:grid-cols-2">
+              <div className="flex flex-col gap-3">
+                <label className={ui.label}>Texto alternativo de la nueva imagen
+                  <input className={ui.input} maxLength={200} onChange={(event) => setAltText(event.target.value)} placeholder={current.name || "Describe la imagen"} value={altText} />
+                </label>
+                <label className={ui.label}>Subir PNG, JPEG o WebP
+                  <input accept="image/png,image/jpeg,image/webp" className={ui.file} disabled={current.media.length >= 12}
+                    onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadImage(file); event.target.value = ""; }} type="file" />
+                </label>
               </div>
-              <button className="rounded-lg border border-zinc-300 px-4 py-2 text-sm" disabled={draft.variants.length >= 99}
-                onClick={() => changeDraft({ variants: [...draft.variants, blankVariant()] })} type="button">+ Agregar variante</button>
-            </div>
-            <div className="mt-5 space-y-4">
-              {draft.variants.map((variant, index) => <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4" key={variant.key}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h3 className="font-medium">Variante {index + 1} · código {variant.code || "al guardar"}</h3>
-                  {draft.variants.length > 1 && <button className="text-sm text-red-700 underline" onClick={() => {
-                    if (variant.id) void trash(`/api/admin/catalog/variants/${variant.id}`,
-                      { kind: "variant", id: variant.id, label: variant.code });
-                    else changeDraft({ variants: draft.variants.filter((item) => item.key !== variant.key) });
-                  }} type="button">{variant.id ? "Enviar variante a papelera" : "Quitar variante"}</button>}
-                </div>
-                <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <label className="text-sm">Talla alfabética (al menos una talla *)
-                    <input className={inputClass} maxLength={40} onChange={(event) => changeVariant(variant.key,
-                      { sizeAlpha: upper(event.target.value) })} placeholder="M, XL, S/M…"
-                      value={variant.sizeAlpha} />
-                  </label>
-                  <label className="text-sm">Talla numérica (al menos una talla *)
-                    <input className={inputClass} maxLength={40} onChange={(event) => changeVariant(variant.key,
-                      { sizeNumeric: upper(event.target.value) })} placeholder="38, 40…"
-                      value={variant.sizeNumeric} />
-                  </label>
-                  <label className="text-sm">Precio normal (Bs) *
-                    <input className={inputClass} inputMode="decimal" onChange={(event) => changeVariant(variant.key,
-                      { regular: event.target.value })} placeholder="120.00" required value={variant.regular} />
-                  </label>
-                  <label className="text-sm">Precio de oferta (Bs, opcional)
-                    <input className={inputClass} inputMode="decimal" onChange={(event) => changeVariant(variant.key,
-                      { offer: event.target.value })} value={variant.offer} />
-                  </label>
-                </div>
-                <div className="mt-4 flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium">{variant.id ? "Nuevas entradas de stock" : "Stock inicial"}</p>
-                  <button className="text-sm text-blue-800 underline" disabled={variant.stockEntries.length >= inventory.branches.length}
-                    onClick={() => changeVariant(variant.key, { stockEntries: [...variant.stockEntries,
-                      { key: crypto.randomUUID(), branchId: 0, quantity: "", cost: "" }] })}
-                    type="button">+ Agregar sucursal</button>
-                </div>
-                {variant.stockEntries.map((entry) => <div className="mt-3 grid gap-3 rounded-lg border border-zinc-200 bg-white p-3 md:grid-cols-[2fr_1fr_1fr_auto]" key={entry.key}>
-                  <label className="text-sm">Sucursal *
-                    <select className={inputClass} onChange={(event) => changeEntry(variant, entry.key,
-                      { branchId: Number(event.target.value) })} required value={entry.branchId}>
-                      <option value={0}>Selecciona una sucursal</option>
-                      {inventory.branches.filter((branch) => branch.id === entry.branchId ||
-                        !variant.stockEntries.some((other) => other.key !== entry.key && other.branchId === branch.id))
-                        .map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-                    </select>
-                  </label>
-                  <label className="text-sm">Unidades *
-                    <input className={inputClass} min={1} onChange={(event) => changeEntry(variant, entry.key,
-                      { quantity: event.target.value })} required step={1} type="number" value={entry.quantity} />
-                  </label>
-                  <label className="text-sm">Costo/u. (Bs) *
-                    <input className={inputClass} inputMode="decimal" onChange={(event) => changeEntry(variant, entry.key,
-                      { cost: event.target.value })} required value={entry.cost} />
-                  </label>
-                  <button className="self-end pb-2 text-sm text-red-700 underline" onClick={() => changeVariant(variant.key,
-                    { stockEntries: variant.stockEntries.filter((item) => item.key !== entry.key) })}
-                    type="button">Quitar</button>
-                </div>)}
-                {variant.id > 0 && <p className="mt-3 text-xs text-zinc-600">Existencias: {inventory.stock.filter((stock) =>
-                  stock.variantId === variant.id).map((stock) => {
-                    const branch = inventory.branches.find((item) => item.id === stock.branchId);
-                    return `${branch?.name || stock.branchId}: ${stock.quantity}`;
-                  }).join(" · ") || "0"}</p>}
-                <label className="mt-4 flex items-center gap-2 text-sm"><input checked={variant.isActive}
-                  onChange={(event) => changeVariant(variant.key, { isActive: event.target.checked })}
-                  type="checkbox" /> Variante activa</label>
-              </div>)}
+              <div className="flex flex-col gap-3">
+                <label className={ui.label}>O elegir del banco de imágenes
+                  <select className={ui.input} onChange={(event) => setSelectedMediaId(Number(event.target.value))} value={selectedMediaId}>
+                    <option value={0}>Selecciona una imagen</option>
+                    {libraryChoices.map((item) => <option key={item.id} value={item.id}>{item.altText || `Imagen ${item.id}`}</option>)}
+                  </select>
+                </label>
+                <button className={`${ui.secondary} self-start`} disabled={!selectedMediaId || current.media.length >= 12}
+                  onClick={() => {
+                    const image = library.find((item) => item.id === selectedMediaId && !item.isDeleted);
+                    if (image) changeDraft({ media: [...current.media, image] });
+                    setSelectedMediaId(0);
+                  }} type="button">Agregar imagen</button>
+              </div>
             </div>
           </section>
 
-          <section className="rounded-xl border border-zinc-200 bg-white p-6">
-            <h2 className="text-xl font-semibold">Visibilidad</h2>
-            <div className="mt-4 flex flex-wrap items-end gap-4">
-              <label className="text-sm">Estado *
-                <select className={inputClass} onChange={(event) => changeDraft({ status: event.target.value as Draft["status"] })}
-                  value={draft.status}>
-                  <option value="active">Activo: visible en la tienda</option>
-                  <option value="draft">Borrador</option>
-                  <option value="archived">Archivado</option>
-                </select>
-              </label>
-              <label className="flex items-center gap-2 pb-2 text-sm"><input checked={draft.isFeatured}
-                onChange={(event) => changeDraft({ isFeatured: event.target.checked })}
-                type="checkbox" /> Destacado</label>
+          <section className={`${ui.card} ${ui.cardPad}`}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className={ui.cardTitle}>Tallas, precios e inventario</h2>
+                <p className={`${ui.hint} mt-1`}>Cada variante necesita talla alfabética, numérica o ambas. Puedes cargar stock en varias sucursales.</p>
+              </div>
+              <button className={ui.secondary} disabled={current.variants.length >= 99}
+                onClick={() => changeDraft({ variants: [...current.variants, blankVariant()] })} type="button">+ Agregar variante</button>
+            </div>
+            <div className="mt-5 flex flex-col gap-3">
+              {current.variants.map((variant, index) => {
+                const stockText = inventory!.stock.filter((stock) => stock.variantId === variant.id).map((stock) => {
+                  const branch = inventory!.branches.find((item) => item.id === stock.branchId);
+                  return `${branch?.name || stock.branchId}: ${stock.quantity}`;
+                }).join(" · ") || "0";
+                return <div className={`border p-4 ${variant.isActive ? "border-line" : "border-dashed border-[#d0d0d0] bg-soft"}`} key={variant.key}>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h3 className="m-0 flex items-center gap-2 text-sm font-semibold">Variante {index + 1}
+                      <span className="font-mono text-xs font-normal text-graphite">{variant.code || "código al guardar"}</span></h3>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 text-[13px]"><input checked={variant.isActive} className="size-4 accent-ink"
+                        onChange={(event) => changeVariant(variant.key, { isActive: event.target.checked })} type="checkbox" /> Activa</label>
+                      {current.variants.length > 1 && <button className={ui.dangerLink} onClick={() => {
+                        if (variant.id) void trash(`/api/admin/catalog/variants/${variant.id}`,
+                          { kind: "variant", id: variant.id, label: variant.code });
+                        else changeDraft({ variants: current.variants.filter((item) => item.key !== variant.key) });
+                      }} type="button">{variant.id ? "Enviar a papelera" : "Quitar"}</button>}
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <label className={ui.label}>Talla alfabética
+                      <input className={`${ui.input} font-mono`} maxLength={40} onChange={(event) => changeVariant(variant.key,
+                        { sizeAlpha: upper(event.target.value) })} placeholder="M, XL, S/M…" value={variant.sizeAlpha} />
+                    </label>
+                    <label className={ui.label}>Talla numérica
+                      <input className={`${ui.input} font-mono`} maxLength={40} onChange={(event) => changeVariant(variant.key,
+                        { sizeNumeric: upper(event.target.value) })} placeholder="38, 40…" value={variant.sizeNumeric} />
+                    </label>
+                    <label className={ui.label}>Precio normal (Bs) *
+                      <input className={`${ui.input} font-mono`} inputMode="decimal" onChange={(event) => changeVariant(variant.key,
+                        { regular: event.target.value })} placeholder="120.00" required value={variant.regular} />
+                    </label>
+                    <label className={ui.label}>Precio de oferta (Bs)
+                      <input className={`${ui.input} font-mono`} inputMode="decimal" onChange={(event) => changeVariant(variant.key,
+                        { offer: event.target.value })} placeholder="Opcional" value={variant.offer} />
+                    </label>
+                  </div>
+                  <p className={`${ui.hint} mt-2`}>Al menos una talla es obligatoria. La oferta debe ser menor que el precio normal.</p>
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-mist pt-3">
+                    <p className="m-0 text-[13px] font-medium">{variant.id ? "Nuevas entradas de stock" : "Stock inicial"}
+                      {variant.id > 0 && <span className="ml-2 font-mono text-xs font-normal text-graphite">Existencias: {stockText}</span>}</p>
+                    <button className={ui.link} disabled={variant.stockEntries.length >= inventory!.branches.length}
+                      onClick={() => changeVariant(variant.key, { stockEntries: [...variant.stockEntries,
+                        { key: crypto.randomUUID(), branchId: 0, quantity: "", cost: "" }] })}
+                      type="button">+ Agregar sucursal</button>
+                  </div>
+                  {variant.stockEntries.map((entry) => <div className="mt-3 grid gap-3 bg-soft p-3 md:grid-cols-[2fr_1fr_1fr_auto] md:items-end" key={entry.key}>
+                    <label className={ui.label}>Sucursal *
+                      <select className={ui.input} onChange={(event) => changeEntry(variant, entry.key,
+                        { branchId: Number(event.target.value) })} required value={entry.branchId}>
+                        <option value={0}>Selecciona una sucursal</option>
+                        {inventory!.branches.filter((branch) => branch.id === entry.branchId ||
+                          !variant.stockEntries.some((other) => other.key !== entry.key && other.branchId === branch.id))
+                          .map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                      </select>
+                    </label>
+                    <label className={ui.label}>Unidades *
+                      <input className={`${ui.input} font-mono`} min={1} onChange={(event) => changeEntry(variant, entry.key,
+                        { quantity: event.target.value })} required step={1} type="number" value={entry.quantity} />
+                    </label>
+                    <label className={ui.label}>Costo/u. (Bs) *
+                      <input className={`${ui.input} font-mono`} inputMode="decimal" onChange={(event) => changeEntry(variant, entry.key,
+                        { cost: event.target.value })} required value={entry.cost} />
+                    </label>
+                    <button className={`${ui.dangerLink} pb-3`} onClick={() => changeVariant(variant.key,
+                      { stockEntries: variant.stockEntries.filter((item) => item.key !== entry.key) })}
+                      type="button">Quitar</button>
+                  </div>)}
+                </div>;
+              })}
             </div>
           </section>
         </fieldset>
-        <div className="sticky bottom-4 flex flex-wrap items-center gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-lg">
-          <button className={buttonClass} disabled={busy} type="submit">{busy ? "Guardando…" : draft.id ? "Guardar cambios" : "Registrar producto"}</button>
-          {draft.id > 0 && <button className="text-sm text-red-700 underline" disabled={busy}
-            onClick={() => void trash(`/api/admin/catalog/products/${draft.id}`,
-              { kind: "product", id: draft.id, label: draft.name })} type="button">Enviar producto a papelera</button>}
-        </div>
-      </form>}
-  </div>;
+
+        <aside className="flex flex-col gap-4 xl:sticky xl:top-6">
+          <section className={`${ui.card} ${ui.cardPad} flex flex-col gap-4`}>
+            <h2 className={ui.cardTitle}>Publicación</h2>
+            <label className={ui.label}>Estado *
+              <select className={ui.input} disabled={busy} onChange={(event) => changeDraft({ status: event.target.value as Draft["status"] })}
+                value={current.status}>
+                <option value="active">Activo: visible en la tienda</option>
+                <option value="draft">Borrador</option>
+                <option value="archived">Archivado</option>
+              </select>
+            </label>
+            <label className="flex items-start gap-2.5 text-sm"><input checked={current.isFeatured} className="mt-0.5 size-4 accent-ink" disabled={busy}
+              onChange={(event) => changeDraft({ isFeatured: event.target.checked })} type="checkbox" />
+              <span>Destacado<span className={`${ui.hint} block`}>Aparece en la sección «Productos destacados» de la landing.</span></span></label>
+            <div className="flex flex-col gap-2 border-t border-line pt-4 text-[13px]">
+              <div className="flex justify-between"><span className="text-graphite">Variantes</span><span className="font-mono">{current.variants.length}</span></div>
+              <div className="flex justify-between"><span className="text-graphite">Imágenes</span><span className="font-mono">{current.media.length}</span></div>
+              <div className="flex justify-between"><span className="text-graphite">Entradas de stock nuevas</span>
+                <span className="font-mono">{current.variants.reduce((sum, variant) => sum + variant.stockEntries.length, 0)}</span></div>
+            </div>
+            <button className={`${ui.primary} h-12 w-full`} disabled={busy} type="submit">{busy ? "Guardando…" : current.id ? "Guardar cambios" : "Registrar producto"}</button>
+            {current.id > 0 && <button className={`${ui.dangerLink} self-start`} disabled={busy}
+              onClick={() => void trash(`/api/admin/catalog/products/${current.id}`,
+                { kind: "product", id: current.id, label: current.name })} type="button">Enviar producto a papelera</button>}
+          </section>
+          <p className={`${ui.hint} px-1`}>Producto, variantes, imágenes y entradas de stock se guardan juntos: si algo falla, no se registra nada. Las compras posteriores con otro costo se registran en <Link className="underline" href="/admin/inventario">Inventario</Link>.</p>
+        </aside>
+      </form>
+    </>;
+  }
 }

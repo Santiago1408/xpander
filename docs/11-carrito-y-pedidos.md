@@ -1,10 +1,25 @@
-# Carrito y pedidos para recojo
+# Carrito, pago por QR y pedidos
 
-El cliente añade variantes desde `/catalogo`. El carrito se conserva en el navegador y muestra cantidades y un total estimado en bolivianos. Para solicitar el recojo, elige una sucursal activa e ingresa nombre y teléfono. El servidor vuelve a comprobar que las variantes estén publicadas, que sus precios no hayan cambiado y que exista stock suficiente en esa sucursal. El pedido se guarda como **pendiente** antes de mostrar el enlace a WhatsApp `59170782380`.
+## Flujo del cliente
 
-Abrir WhatsApp solo prepara el mensaje: el cliente aún debe pulsar **Enviar**. El sistema no puede saber si lo envió o si el dueño lo recibió. La lista de `/admin/pedidos` muestra todos los pedidos guardados, incluso cuando el cliente cierra WhatsApp. La clave de solicitud evita duplicar un pedido si se reintenta la misma operación desde el mismo formulario.
+1. El cliente agrega variantes desde `/catalogo` (botón «+» de cada tarjeta, con selector de talla) o desde la ficha `/catalogo/[slug]`. El carrito se conserva en el navegador (`xpander_cart_v1`).
+2. El botón flotante del carrito (abajo a la derecha) o el ícono del encabezado abre un panel lateral con el total por producto y el total a pagar. `/carrito` muestra el mismo flujo a pantalla completa.
+3. **Finalizar compra** solicita nombre, celular, indicaciones opcionales, la forma de entrega y la sucursal:
+   - **Recojo en sucursal**: sin costo.
+   - **Envío a domicilio**: la sucursal elegida es la que despacha y de la que se descontará el stock. La dirección y el costo del envío se coordinan por WhatsApp y se pagan aparte; el QR cubre solo los productos.
+4. **Continuar con el pago** registra el pedido como **pendiente** (`payment_method = qr`, `payment_status = awaiting_receipt`) y muestra el número `XP-…`, el QR vigente, los pasos para pagar y el campo para adjuntar el comprobante. Desde ese momento el carrito se vacía y el pedido ya no se modifica.
+5. **Enviar comprobante y continuar** sube el archivo (PNG, JPEG o PDF de hasta 8 MB) y pasa al último paso: **Enviar detalle por WhatsApp** abre el mensaje para el número `ORDER_WHATSAPP_NUMBER`. Abrir WhatsApp no prueba que el mensaje se envió; el pedido y el comprobante ya están guardados.
+6. El navegador recuerda los pedidos con pago en seguimiento; al volver a abrir el carrito vacío se retoma el último y el cliente puede consultar su estado.
 
-El pedido pendiente **no reserva stock**. Al pulsar **Confirmar y descontar inventario**, la API bloquea el pedido, registra una salida por ítem y cambia su estado a confirmado dentro de una transacción. Si el saldo ya no alcanza, no descuenta ninguna unidad ni confirma el pedido; el dueño deberá reponer o corregir el inventario antes de volver a intentar. Una segunda confirmación no crea salidas adicionales. El pedido conserva nombre, talla, código, precio y sucursal como copia histórica.
+Si no hay un QR vigente, el carrito no permite finalizar la compra y el panel de administración muestra una alerta en todas las pantallas. También avisa cuando al QR le quedan 7 días o menos.
+
+## Flujo del administrador
+
+En `/admin/pedidos`, el dueño descarga el comprobante, verifica el abono real en su banca y pulsa **Aprobar pago y descontar stock**: la interfaz verifica el pago y luego confirma el pedido, registrando una salida por ítem en la sucursal del pedido. Si el stock ya no alcanza, el pago queda verificado y el pedido sigue pendiente hasta reponer el inventario y pulsar **Confirmar y descontar inventario**. **Rechazar comprobante** permite que el cliente suba otro.
+
+**Cancelar pedido** está disponible para pedidos pendientes cuyo pago no fue verificado (por ejemplo, abandonados sin comprobante). No descuenta inventario. Un pedido con pago verificado no se puede cancelar.
+
+El pedido pendiente **no reserva stock**. El servidor comprueba precios y existencias al registrarlo y de nuevo al confirmarlo, dentro de una transacción. El pedido conserva nombre, talla, código, precio, sucursal y forma de entrega como copia histórica.
 
 ## Aplicar la corrección de salidas de stock
 
@@ -22,10 +37,10 @@ La última consulta debe mostrar `012_order_requests.sql` y `013_stock_outflow.s
 
 ## Prueba local completa
 
-1. En `/admin/catalogo/productos`, crea un producto de prueba **activo**, con una variante, precio de venta y una entrada inicial de **3 unidades** en una sucursal concreta. Comprueba en `/admin/inventario` que el saldo sea 3 en esa sucursal.
-2. En `/catalogo`, agrega **2 unidades** de esa variante. Abre el carrito, elige **la misma sucursal**, ingresa nombre y teléfono de prueba y pulsa **Registrar pedido**.
-3. Comprueba que aparece un número `XP-...` y un enlace a WhatsApp con las 2 unidades. Aunque cierres WhatsApp, el pedido debe seguir **Pendiente** en `/admin/pedidos`; el saldo debe continuar en 3.
-4. Pulsa **Confirmar y descontar inventario**. El pedido debe pasar a **Confirmado** y el saldo de `/admin/inventario` a **1**; en movimientos debe aparecer una venta de **−2**. Recarga ambas páginas: el saldo y el número de salidas deben permanecer iguales.
+1. En `/admin/negocio`, carga un QR de prueba con su vencimiento. En `/admin/catalogo/productos`, crea un producto **activo** con una variante, precio y una entrada inicial de **3 unidades** en una sucursal.
+2. En `/catalogo`, agrega **2 unidades** de esa variante, abre el carrito y pulsa **Finalizar compra**. Completa los datos, elige **Recojo en sucursal** y la misma sucursal, y pulsa **Continuar con el pago**.
+3. Comprueba que aparece un número `XP-...` con el QR. Adjunta un comprobante de prueba y pulsa **Enviar comprobante y continuar**; luego abre el enlace de WhatsApp. El pedido debe aparecer como **Comprobante por revisar** en `/admin/pedidos` y el saldo seguir en 3.
+4. Pulsa **Aprobar pago y descontar stock** (solo en una prueba sin dinero real). El pedido debe pasar a **Confirmado** y el saldo de `/admin/inventario` a **1**; en movimientos debe aparecer una venta de **−2**.
 5. Intenta solicitar 2 unidades más de la misma variante y sucursal. El servidor debe rechazar la solicitud por falta de stock y no crear otro pedido.
 
 Un pedido que quedó pendiente antes de aplicar la `013` puede confirmarse después sin registrarlo otra vez, siempre que el stock de su sucursal siga siendo suficiente. Si aún falla, revisa el mensaje rojo del panel y ejecuta:

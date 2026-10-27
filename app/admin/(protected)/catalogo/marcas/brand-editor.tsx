@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { Feedback, Modal, ui } from "../../../admin-ui";
 
 type Brand = { id: number; name: string; productCount: number };
 
@@ -61,49 +62,38 @@ export default function BrandEditor() {
     } finally { setBusy(false); }
   }
 
-  return <div className="space-y-6">
-    {error && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
-    {notice && <p className="rounded-lg bg-green-50 p-4 text-sm text-green-800" role="status">{notice}</p>}
-    <form className="rounded-xl border border-zinc-200 bg-white p-6" onSubmit={(event) => void save(event)}>
-      <h2 className="text-lg font-semibold">{editing ? "Modificar marca" : "Agregar marca"}</h2>
-      <div className="mt-4 flex flex-wrap items-end gap-3">
-        <label className="min-w-64 flex-1 text-sm">Nombre *
-          <input className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2" disabled={busy}
-            maxLength={120} onChange={(event) => setName(event.target.value.toLocaleUpperCase("es-BO"))}
-            required value={name} />
-        </label>
-        <button className="rounded-lg bg-zinc-950 px-4 py-2 text-sm text-white disabled:opacity-50"
-          disabled={busy} type="submit">{editing ? "Guardar cambios" : "Agregar"}</button>
-        {editing && <button className="rounded-lg border border-zinc-300 px-4 py-2 text-sm" disabled={busy}
-          onClick={() => { setEditing(null); setName(""); }} type="button">Cancelar</button>}
-      </div>
+  return <section className={`${ui.card} flex flex-col`}>
+    <div className="border-b border-line px-5 py-4 sm:px-6">
+      <h2 className={ui.cardTitle}>Marcas</h2>
+      <p className={`${ui.hint} mt-1`}>La marca es opcional en cada ficha. Se guardan en mayúsculas.</p>
+    </div>
+    <form className="flex flex-col gap-3 px-5 py-4 sm:px-6" onSubmit={(event) => void save(event)}>
+      <label className={ui.label}>{editing ? `Modificar «${editing.name}»` : "Nueva marca"}
+        <span className="flex gap-2">
+          <input className={ui.input} disabled={busy} maxLength={120} onChange={(event) => setName(event.target.value.toLocaleUpperCase("es-BO"))}
+            placeholder="ADIDAS" required value={name} />
+          <button className={ui.primary} disabled={busy} type="submit">{editing ? "Guardar" : "Agregar"}</button>
+        </span>
+      </label>
+      {editing && <button className={`${ui.link} self-start`} disabled={busy} onClick={() => { setEditing(null); setName(""); }} type="button">Cancelar edición</button>}
+      <Feedback error={error} notice={notice} />
     </form>
-    <section className="rounded-xl border border-zinc-200 bg-white p-6">
-      <h2 className="text-lg font-semibold">Marcas registradas</h2>
-      {brands.length === 0 ? <p className="mt-3 text-sm text-zinc-600">Aún no hay marcas.</p> :
-        <ul className="mt-4 divide-y divide-zinc-100">{brands.map((brand) => <li className="flex flex-wrap items-center gap-3 py-3" key={brand.id}>
-          <span className="mr-auto font-medium">{brand.name} <span className="text-sm font-normal text-zinc-500">· {brand.productCount} producto(s)</span></span>
-          <button className="text-sm text-blue-800 underline" disabled={busy} onClick={() => {
-            setEditing(brand); setName(brand.name); setError("");
-          }} type="button">Modificar</button>
-          <button className="text-sm text-red-700 underline" disabled={busy}
-            onClick={() => setDeleting(brand)} type="button">Eliminar</button>
-        </li>)}</ul>}
-    </section>
-    {deleting && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="presentation">
-      <div aria-labelledby="delete-brand-title" aria-modal="true" className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" role="dialog">
-        <h2 className="text-xl font-semibold" id="delete-brand-title">Eliminar marca</h2>
-        <p className="mt-3 text-sm text-zinc-700">Se eliminará «{deleting.name}».</p>
-        {deleting.productCount > 0 && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-          Hay {deleting.productCount} producto(s) registrados con esta marca. Permanecerán en el sistema, pero quedarán sin marca.
-        </p>}
-        <div className="mt-6 flex justify-end gap-3">
-          <button className="rounded-lg border border-zinc-300 px-4 py-2 text-sm" disabled={busy}
-            onClick={() => setDeleting(null)} type="button">Cancelar</button>
-          <button className="rounded-lg bg-red-700 px-4 py-2 text-sm text-white disabled:opacity-50"
-            disabled={busy} onClick={() => void remove()} type="button">Sí, eliminar</button>
-        </div>
+    {brands.length === 0 ? <p className="m-0 px-5 pb-5 text-sm text-graphite sm:px-6">Aún no hay marcas.</p> :
+      <ul className="m-0 list-none p-0">{brands.map((brand) => <li className={`flex items-center gap-3 border-t border-mist px-5 py-3 sm:px-6 ${editing?.id === brand.id ? "bg-soft" : ""}`} key={brand.id}>
+        <span className="mr-auto flex flex-col"><span className="text-sm font-medium">{brand.name}</span>
+          <span className="font-mono text-[11px] text-graphite">{brand.productCount} producto(s)</span></span>
+        <button className={ui.quiet} disabled={busy} onClick={() => { setEditing(brand); setName(brand.name); setError(""); }} type="button">Editar</button>
+        <button className={ui.dangerLink} disabled={busy} onClick={() => setDeleting(brand)} type="button">Eliminar</button>
+      </li>)}</ul>}
+    {deleting && <Modal labelledBy="delete-brand-title" onClose={() => !busy && setDeleting(null)} title="Eliminar marca">
+      <p className="mt-3 text-sm text-body">Se eliminará «{deleting.name}».</p>
+      {deleting.productCount > 0 && <p className="mt-3 border-l-2 border-amber-600 bg-amber-50 p-3 text-sm text-amber-900">
+        Hay {deleting.productCount} producto(s) registrados con esta marca. Permanecerán en el sistema, pero quedarán sin marca.
+      </p>}
+      <div className="mt-6 flex justify-end gap-3">
+        <button className={ui.secondary} disabled={busy} onClick={() => setDeleting(null)} type="button">Cancelar</button>
+        <button className={ui.danger} disabled={busy} onClick={() => void remove()} type="button">Sí, eliminar</button>
       </div>
-    </div>}
-  </div>;
+    </Modal>}
+  </section>;
 }

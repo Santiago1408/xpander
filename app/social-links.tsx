@@ -12,9 +12,9 @@ export default function SocialLinks({ links }: { links?: Record<string, string> 
   return (
     <div aria-label="Redes sociales" className="flex flex-wrap gap-3">
       {visible.map(({ key, label }) => (
-        <a aria-label={label} className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100"
+        <a aria-label={label} className="inline-flex h-11 items-center gap-2.5 border border-line pl-1.5 pr-4 text-sm font-medium hover:border-ink"
           href={links[key]} key={key} rel="noopener noreferrer" target="_blank">
-          <span aria-hidden="true" className="flex size-6 items-center justify-center rounded-full bg-zinc-950 text-xs font-bold text-white">{symbols[key]}</span>
+          <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-full border border-graphite font-mono text-[11px]">{symbols[key]}</span>
           {label}
         </a>
       ))}

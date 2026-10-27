@@ -1,13 +1,9 @@
-import Link from "next/link";
+import { PageHeader } from "../../admin-ui";
 import BusinessEditor from "./business-editor";
 
-export default function BusinessPage() {
-  return <div className="space-y-7">
-    <div>
-      <Link className="text-sm text-zinc-600 underline" href="/admin">← Panel</Link>
-      <h1 className="mt-4 text-3xl font-semibold">Datos del negocio</h1>
-      <p className="mt-2 text-zinc-600">Administra el teléfono, las redes del negocio y la imagen del QR bancario.</p>
-    </div>
+export default function Page() {
+  return <>
+    <PageHeader description="Teléfono, redes sociales y QR bancario. Estos datos se guardan al pulsar «Guardar cambios» y no dependen de publicar la landing." eyebrow="Ajustes · Negocio" title="Datos del negocio" />
     <BusinessEditor />
-  </div>;
+  </>;
 }

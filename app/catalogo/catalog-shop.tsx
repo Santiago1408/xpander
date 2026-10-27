@@ -1,448 +1,229 @@
 "use client";
 
-import Image from "next/image";
-import MediaImage from "../media-image";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
+import ProductCard from "../product-card";
+import { catalogBrands, colorSwatch, formatBOB, lowestPrice, titleCase } from "../shop-format";
 
 export type CatalogProduct = {
-  id: number; code: string; name: string; description: string; style: string;
+  id: number; code: string; slug: string; name: string; description: string; style: string;
   audience: string; color: string; brandName: string; isFeatured: boolean;
   variants: { id: number; code: string; sizeAlpha: string; sizeNumeric: string;
     priceMinor: number; compareAtPriceMinor: number | null }[];
   media: { id: number; url: string; altText: string }[];
 };
 
-type CartItem = { variantId: number; quantity: number };
-type Branch = { id: number; name: string; address: string; instructions: string };
-type Receipt = { id: number; number: string; status: string; totalMinor: number; whatsappUrl: string;
-  paymentMethod: "whatsapp" | "qr"; paymentStatus: string; accessToken: string };
-type QRProfile = { qrUrl: string; qrExpiresOn: string };
+const pageSize = 12;
+const alphaOrder = ["XXS", "XS", "S", "S/M", "M", "M/L", "L", "L/XL", "XL", "XXL", "XXXL", "2XL", "3XL", "4XL"];
+const sortOptions = [
+  { value: "", label: "Recomendados" },
+  { value: "recientes", label: "Más recientes" },
+  { value: "precio-asc", label: "Precio: menor a mayor" },
+  { value: "precio-desc", label: "Precio: mayor a menor" },
+  { value: "nombre", label: "Nombre (A–Z)" },
+];
 
-const cartStorageKey = "xpander_cart_v1";
-const pendingQRKey = "xpander_pending_qr_order_v1";
-
-function savedQRReceipts(): Receipt[] {
-  try {
-    const raw = JSON.parse(window.localStorage.getItem(pendingQRKey) || "[]") as unknown;
-    const values = Array.isArray(raw) ? raw : [raw];
-    return values.filter((value): value is Receipt => typeof value === "object" && value !== null &&
-      Number.isSafeInteger(value.id) && value.id > 0 && value.paymentMethod === "qr" &&
-      typeof value.accessToken === "string" && value.accessToken.length > 0);
-  } catch { return []; }
+function distinct(values: string[]) {
+  return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, "es-BO"));
 }
 
-function rememberQR(receipt: Receipt | null, removeId?: number): Receipt[] {
-  const current = savedQRReceipts().filter((item) => item.id !== (receipt?.id ?? removeId));
-  if (receipt) current.push(receipt);
-  try { window.localStorage.setItem(pendingQRKey, JSON.stringify(current.slice(-20))); }
-  catch { /* The order still exists if browser storage is unavailable. */ }
-  return current.slice(-20);
+function sortSizes(values: string[]) {
+  const rank = (value: string) => {
+    const alpha = alphaOrder.indexOf(value);
+    if (alpha >= 0) return [0, alpha];
+    const number = Number.parseFloat(value.replace(",", "."));
+    return Number.isFinite(number) ? [1, number] : [2, 0];
+  };
+  return [...values].sort((a, b) => {
+    const [ga, va] = rank(a); const [gb, vb] = rank(b);
+    return ga - gb || va - vb || a.localeCompare(b, "es-BO");
+  });
 }
 
-function money(minor: number): string {
-  const whole = Math.floor(minor / 100).toLocaleString("es-BO");
-  return `Bs ${whole},${String(minor % 100).padStart(2, "0")}`;
+function productSizes(product: CatalogProduct) {
+  return product.variants.flatMap((variant) => [variant.sizeAlpha, variant.sizeNumeric]).filter(Boolean);
 }
 
-function sizeLabel(variant: CatalogProduct["variants"][number]) {
-  return [variant.sizeAlpha, variant.sizeNumeric].filter(Boolean).join(" / ");
+function count(products: CatalogProduct[], field: "audience" | "brandName" | "color" | "style", value: string) {
+  return products.filter((product) => product[field] === value).length;
 }
+
+const filterTitle = "font-mono text-[11px] uppercase tracking-[0.1em] text-graphite";
 
 export default function CatalogShop({ products }: { products: CatalogProduct[] }) {
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [cartOpen, setCartOpen] = useState(false);
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [pickupBranchId, setPickupBranchId] = useState(0);
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
-  const [customerNote, setCustomerNote] = useState("");
-  const [receipt, setReceipt] = useState<Receipt | null>(null);
-  const [savedOrders, setSavedOrders] = useState<Receipt[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<"whatsapp" | "qr">("whatsapp");
-  const [qrProfile, setQRProfile] = useState<QRProfile | null>(null);
-  const [proofFile, setProofFile] = useState<File | null>(null);
-  const [proofBusy, setProofBusy] = useState(false);
-  const [proofError, setProofError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [branchError, setBranchError] = useState("");
-  const [search, setSearch] = useState("");
-  const [styleFilter, setStyleFilter] = useState("");
-  const [audienceFilter, setAudienceFilter] = useState("");
-  const [brandFilter, setBrandFilter] = useState("");
-  const [colorFilter, setColorFilter] = useState("");
-  const pendingRequest = useRef<{ key: string; payload: string } | null>(null);
+  const params = useSearchParams();
+  const audience = params.get("publico") || "";
+  const style = params.get("estilo") || "";
+  const brand = params.get("marca") || "";
+  const color = params.get("color") || "";
+  const sizes = (params.get("talla") || "").split(",").filter(Boolean);
+  const sort = params.get("orden") || "";
+  const query = params.get("q") || "";
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const variantMap = useMemo(() => {
-    const map = new Map<number, { product: CatalogProduct; variant: CatalogProduct["variants"][number] }>();
-    for (const product of products) for (const variant of product.variants) {
-      map.set(variant.id, { product, variant });
+  const options = useMemo(() => {
+    const prices = products.map(lowestPrice);
+    return {
+      audiences: distinct(products.map((product) => product.audience)),
+      styles: distinct(products.map((product) => product.style)),
+      brands: catalogBrands(products),
+      colors: distinct(products.map((product) => product.color)),
+      sizes: sortSizes([...new Set(products.flatMap(productSizes))]),
+      minPrice: Math.floor(Math.min(...prices) / 100),
+      maxPrice: Math.ceil(Math.max(...prices) / 100),
+    };
+  }, [products]);
+  const priceParam = Number(params.get("precio"));
+  const priceLimit = Number.isFinite(priceParam) && priceParam > 0 ? Math.min(priceParam, options.maxPrice) : options.maxPrice;
+
+  // Filters live in the URL so menu links, brand links and reloads keep them.
+  function update(changes: Record<string, string>) {
+    const next = new URLSearchParams(params.toString());
+    for (const [key, value] of Object.entries(changes)) {
+      if (value) next.set(key, value); else next.delete(key);
     }
-    return map;
-  }, [products]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      try {
-        const raw = JSON.parse(window.localStorage.getItem(cartStorageKey) || "[]") as unknown;
-        if (Array.isArray(raw)) {
-          const next: CartItem[] = [];
-          for (const entry of raw) {
-            if (typeof entry === "object" && entry !== null &&
-              Number.isSafeInteger(entry.variantId) && Number.isSafeInteger(entry.quantity) &&
-              entry.quantity > 0 && entry.quantity <= 20 && variantMap.has(entry.variantId) &&
-              !next.some((item) => item.variantId === entry.variantId)) {
-              next.push({ variantId: entry.variantId, quantity: entry.quantity });
-            }
-            if (next.length >= 20) break;
-          }
-          setCart(next);
-        }
-      } catch { /* A malformed local cart starts empty. */ }
-      setLoaded(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [variantMap]);
-
-  useEffect(() => {
-    if (loaded) window.localStorage.setItem(cartStorageKey, JSON.stringify(cart));
-  }, [cart, loaded]);
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const response = await fetch("/api/pickup-branches", { cache: "no-store" });
-        if (!response.ok) throw new Error("No se pudieron cargar las sucursales.");
-        const next = (await response.json()) as Branch[];
-        setBranches(next);
-        setPickupBranchId(next[0]?.id || 0);
-      } catch (failure) {
-        setBranchError(failure instanceof Error ? failure.message : "No se pudieron cargar las sucursales.");
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const response = await fetch("/api/business", { cache: "no-store" });
-        if (!response.ok) return;
-        const profile = (await response.json()) as QRProfile;
-        if (profile.qrUrl) setQRProfile(profile);
-      } catch { /* Ordering by WhatsApp remains available. */ }
-    })();
-    const timer = window.setTimeout(() => {
-      try {
-        const saved = savedQRReceipts();
-        setSavedOrders(saved);
-        const previous = saved.at(-1);
-        if (previous) {
-            setReceipt(previous); setCartOpen(true);
-            void fetch(`/api/orders/${previous.id}/payment`, { cache: "no-store",
-              headers: { "X-Order-Token": previous.accessToken } }).then(async (response) => {
-                if (!response.ok) return;
-                const current = (await response.json()) as { status: string; paymentStatus: string };
-                setReceipt({ ...previous, status: current.status, paymentStatus: current.paymentStatus });
-                if (current.paymentStatus === "verified" || current.status === "confirmed")
-                  setSavedOrders(rememberQR(null, previous.id));
-              }).catch(() => undefined);
-        }
-      } catch { setSavedOrders([]); }
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  const cartLines = cart.flatMap((item) => {
-    const found = variantMap.get(item.variantId);
-    return found ? [{ ...item, ...found }] : [];
-  });
-  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const total = cartLines.reduce((sum, line) => sum + line.quantity * line.variant.priceMinor, 0);
-  const selectedBranch = branches.find((branch) => branch.id === pickupBranchId);
-  const filterOptions = useMemo(() => {
-    const values = (field: "style" | "audience" | "brandName" | "color") =>
-      [...new Set(products.map((product) => product[field]).filter(Boolean))]
-        .sort((a, b) => a.localeCompare(b, "es-BO"));
-    return { styles: values("style"), audiences: values("audience"),
-      brands: values("brandName"), colors: values("color") };
-  }, [products]);
-  const filteredProducts = useMemo(() => {
-    const query = search.trim().toLocaleUpperCase("es-BO");
-    return products.filter((product) =>
-      (!styleFilter || product.style === styleFilter) &&
-      (!audienceFilter || product.audience === audienceFilter) &&
-      (!brandFilter || product.brandName === brandFilter) &&
-      (!colorFilter || product.color === colorFilter) &&
-      (!query || `${product.name} ${product.code} ${product.description}`.toLocaleUpperCase("es-BO").includes(query)));
-  }, [products, search, styleFilter, audienceFilter, brandFilter, colorFilter]);
-
-  function updateCart(variantId: number, quantity: number) {
-    if (receipt?.paymentMethod === "qr" && receipt.paymentStatus !== "submitted") return;
-    setReceipt(null); setError("");
-    pendingRequest.current = null;
-    setCart((current) => {
-      const others = current.filter((item) => item.variantId !== variantId);
-      if (quantity <= 0) return others;
-      if (others.length >= 20 || quantity > 20) return current;
-      return [...others, { variantId, quantity }];
-    });
+    const search = next.toString();
+    window.history.replaceState(null, "", `/catalogo${search ? `?${search}` : ""}`);
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (busy || cartLines.length === 0 || !pickupBranchId) return;
-    setBusy(true); setError(""); setReceipt(null);
-    try {
-      const data = {
-        pickupBranchId, paymentMethod, customerName: customerName.trim(), customerPhone: customerPhone.trim(),
-        customerNote: customerNote.trim(), items: cartLines.map((line) => ({
-          variantId: line.variantId, quantity: line.quantity,
-          expectedUnitPriceMinor: line.variant.priceMinor,
-        })),
-      };
-      const payload = JSON.stringify(data);
-      if (pendingRequest.current?.payload !== payload) {
-        pendingRequest.current = { key: crypto.randomUUID(), payload };
-      }
-      const response = await fetch("/api/orders", { method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestKey: pendingRequest.current.key, ...data }) });
-      if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo registrar el pedido.");
-      const saved = (await response.json()) as Receipt;
-      window.localStorage.removeItem(cartStorageKey);
-      setCart([]);
-      pendingRequest.current = null;
-      setReceipt(saved);
-      if (saved.paymentMethod === "qr") {
-        setSavedOrders(rememberQR(saved));
-        try {
-          const currentQR = await fetch("/api/business", { cache: "no-store" });
-          if (currentQR.ok) {
-            const profile = (await currentQR.json()) as QRProfile;
-            setQRProfile(profile.qrUrl ? profile : null);
-          }
-        } catch { setQRProfile(null); }
-      }
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "No se pudo registrar el pedido.");
-    } finally { setBusy(false); }
+  const filtered = useMemo(() => {
+    const text = query.trim().toLocaleUpperCase("es-BO");
+    const result = products.filter((product) =>
+      (!audience || product.audience === audience) && (!style || product.style === style) &&
+      (!brand || product.brandName === brand) && (!color || product.color === color) &&
+      (sizes.length === 0 || productSizes(product).some((size) => sizes.includes(size))) &&
+      lowestPrice(product) <= priceLimit * 100 &&
+      (!text || `${product.name} ${product.code} ${product.description} ${product.brandName}`.toLocaleUpperCase("es-BO").includes(text)));
+    if (sort === "recientes") result.sort((a, b) => b.id - a.id);
+    if (sort === "precio-asc") result.sort((a, b) => lowestPrice(a) - lowestPrice(b));
+    if (sort === "precio-desc") result.sort((a, b) => lowestPrice(b) - lowestPrice(a));
+    if (sort === "nombre") result.sort((a, b) => a.name.localeCompare(b.name, "es-BO"));
+    return result;
+  }, [products, audience, style, brand, color, sizes, priceLimit, query, sort]);
+
+  const filterKey = params.toString();
+  const [limit, setLimit] = useState({ key: filterKey, count: pageSize });
+  const shown = limit.key === filterKey ? limit.count : pageSize;
+  const visible = filtered.slice(0, shown);
+  const activeFilters = [audience, brand, color, ...sizes].filter(Boolean).length + (priceLimit < options.maxPrice ? 1 : 0);
+  const title = audience || style || brand || "Catálogo";
+
+  function clearFilters() {
+    update({ publico: "", estilo: "", marca: "", color: "", talla: "", precio: "", q: "" });
   }
 
-  async function uploadProof(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!receipt || !proofFile || proofBusy) return;
-    setProofBusy(true); setProofError("");
-    try {
-      const body = new FormData();
-      body.append("file", proofFile);
-      const response = await fetch(`/api/orders/${receipt.id}/receipt`, { method: "POST",
-        headers: { "X-Order-Token": receipt.accessToken }, body });
-      if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo subir el comprobante.");
-      const result = (await response.json()) as { paymentStatus: string; whatsappUrl: string };
-      const updated = { ...receipt, paymentStatus: result.paymentStatus, whatsappUrl: result.whatsappUrl };
-      setReceipt(updated);
-      setSavedOrders(rememberQR(updated));
-      setProofFile(null);
-    } catch (failure) { setProofError(failure instanceof Error ? failure.message : "No se pudo subir el comprobante."); }
-    finally { setProofBusy(false); }
-  }
-
-  async function refreshPayment() {
-    if (!receipt) return;
-    setProofError("");
-    try {
-      const response = await fetch(`/api/orders/${receipt.id}/payment`, { cache: "no-store",
-        headers: { "X-Order-Token": receipt.accessToken } });
-      if (!response.ok) throw new Error("No se pudo consultar el pago.");
-      const current = (await response.json()) as { status: string; paymentStatus: string };
-      const updated = { ...receipt, status: current.status, paymentStatus: current.paymentStatus };
-      setReceipt(updated);
-      if (current.paymentStatus === "verified" || current.status === "confirmed")
-        setSavedOrders(rememberQR(null, receipt.id));
-      else setSavedOrders(rememberQR(updated));
-    } catch (failure) { setProofError(failure instanceof Error ? failure.message : "No se pudo consultar el pago."); }
-  }
+  const chip = (selected: boolean) => `inline-flex h-10 items-center rounded-full border px-4 text-sm font-medium transition-colors ${
+    selected ? "border-ink bg-ink text-white" : "border-line bg-white hover:border-ink"}`;
 
   return <>
-    <section aria-label="Filtros del catálogo" className="mb-7 rounded-xl border border-zinc-200 bg-white p-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <label className="text-sm">Buscar
-          <input className="mt-1 block w-full rounded-lg border border-zinc-300 p-2" onChange={(event) => setSearch(event.target.value)}
-            placeholder="Nombre o código" type="search" value={search} />
-        </label>
-        <label className="text-sm">Estilo
-          <select className="mt-1 block w-full rounded-lg border border-zinc-300 p-2" onChange={(event) => setStyleFilter(event.target.value)} value={styleFilter}>
-            <option value="">Todos</option>{filterOptions.styles.map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
-        </label>
-        <label className="text-sm">Público
-          <select className="mt-1 block w-full rounded-lg border border-zinc-300 p-2" onChange={(event) => setAudienceFilter(event.target.value)} value={audienceFilter}>
-            <option value="">Todos</option>{filterOptions.audiences.map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
-        </label>
-        <label className="text-sm">Marca
-          <select className="mt-1 block w-full rounded-lg border border-zinc-300 p-2" onChange={(event) => setBrandFilter(event.target.value)} value={brandFilter}>
-            <option value="">Todas</option>{filterOptions.brands.map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
-        </label>
-        <label className="text-sm">Color
-          <select className="mt-1 block w-full rounded-lg border border-zinc-300 p-2" onChange={(event) => setColorFilter(event.target.value)} value={colorFilter}>
-            <option value="">Todos</option>{filterOptions.colors.map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
-        </label>
+    <section className="xp-container">
+      <nav aria-label="Ruta" className="flex gap-2 pt-8 font-mono text-xs text-graphite">
+        <Link className="hover:text-ink" href="/">Inicio</Link><span>/</span>
+        {title === "Catálogo" ? <span className="text-ink">Catálogo</span> : <>
+          <button className="hover:text-ink" onClick={clearFilters} type="button">Catálogo</button><span>/</span>
+          <span className="text-ink">{titleCase(title)}</span>
+        </>}
+      </nav>
+      <div className="flex flex-wrap items-end justify-between gap-6 border-b border-ink pb-8 pt-10">
+        <h1 className="xp-display m-0 text-[clamp(48px,7vw,112px)] leading-[0.9] tracking-[-0.02em] [overflow-wrap:anywhere]">{title}</h1>
+        <div className="flex w-full max-w-[380px] flex-col gap-4">
+          <p className="m-0 text-[15px] leading-relaxed text-graphite">
+            Agrega tus prendas al carrito y paga con QR. {filtered.length} {filtered.length === 1 ? "producto" : "productos"}.
+          </p>
+          <label className="flex h-11 items-center gap-2.5 border border-line px-3.5 focus-within:border-ink" htmlFor="buscar">
+            <svg aria-hidden="true" className="size-[18px] shrink-0 text-graphite" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
+            <span className="sr-only">Buscar por nombre, código o marca</span>
+            <input className="min-w-0 flex-1 bg-transparent text-sm outline-none" id="buscar" onChange={(event) => update({ q: event.target.value })}
+              placeholder="Buscar por nombre, código o marca" type="search" value={query} />
+          </label>
+        </div>
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-zinc-600">
-        <p>{filteredProducts.length} producto(s)</p>
-        {(search || styleFilter || audienceFilter || brandFilter || colorFilter) &&
-          <button className="underline" onClick={() => {
-            setSearch(""); setStyleFilter(""); setAudienceFilter(""); setBrandFilter(""); setColorFilter("");
-          }} type="button">Limpiar filtros</button>}
+      <div className="flex flex-wrap items-center justify-between gap-4 py-5">
+        <div aria-label="Estilo" className="flex flex-wrap gap-2" role="group">
+          <button aria-pressed={!style} className={chip(!style)} onClick={() => update({ estilo: "" })} type="button">Todo</button>
+          {options.styles.map((value) => <button aria-pressed={style === value} className={chip(style === value)} key={value}
+            onClick={() => update({ estilo: style === value ? "" : value })} type="button">{titleCase(value)}</button>)}
+        </div>
+        <div className="flex items-center gap-3">
+          <button aria-expanded={filtersOpen} className="inline-flex h-11 items-center gap-2 border border-line px-4 text-sm font-medium lg:hidden"
+            onClick={() => setFiltersOpen(!filtersOpen)} type="button">
+            Filtros{activeFilters > 0 && <span className="flex size-5 items-center justify-center rounded-full bg-ink font-mono text-[10px] text-white">{activeFilters}</span>}
+          </button>
+          <label className="hidden text-[13px] text-graphite sm:block" htmlFor="orden">Ordenar por</label>
+          <select aria-label="Ordenar por" className="h-11 border border-line bg-white px-3 text-sm" id="orden"
+            onChange={(event) => update({ orden: event.target.value })} value={sort}>
+            {sortOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </div>
       </div>
     </section>
-    {filteredProducts.length === 0 && <p className="mb-7 rounded-xl border border-dashed border-zinc-300 p-8 text-zinc-600">
-      No hay productos con esos filtros.
-    </p>}
-    <div className="grid gap-7 md:grid-cols-2 xl:grid-cols-3">
-      {filteredProducts.map((product) => {
-        const prices = product.variants.map((variant) => variant.priceMinor);
-        const lowest = Math.min(...prices);
-        return <article className="overflow-hidden rounded-2xl border border-zinc-200 bg-white" id={`producto-${product.id}`} key={product.id}>
-          {product.media[0] ? <MediaImage alt={product.media[0].altText} className="aspect-[4/3] w-full object-cover"
-            height={600} sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
-            src={product.media[0].url} width={800} /> :
-            <div className="flex aspect-[4/3] items-center justify-center bg-zinc-100 text-sm tracking-[0.25em] text-zinc-400">XPANDER</div>}
-          <div className="p-5">
-            <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
-              {product.style && <span>{product.style}</span>}
-              {product.audience && <span>· {product.audience}</span>}
-              {product.color && <span>· {product.color}</span>}
-              {product.brandName && <span>· {product.brandName}</span>}
-              {product.isFeatured && <span className="rounded-full bg-zinc-950 px-2 py-1 text-white">Destacado</span>}
-            </div>
-            <h2 className="mt-3 text-xl font-semibold">{product.name}</h2>
-            <p className="mt-1 text-xs text-zinc-500">Código {product.code}</p>
-            {product.description && <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm text-zinc-600">{product.description}</p>}
-            <p className="mt-5 text-lg font-semibold">{prices.length > 1 ? "Desde " : ""}{money(lowest)}</p>
-            <ul className="mt-4 space-y-3 text-sm text-zinc-700">
-              {product.variants.map((variant) => <li className="flex flex-wrap items-center justify-between gap-3" key={variant.id}>
-                <span>{sizeLabel(variant)} · {variant.code}</span>
-                <span className="flex items-center gap-2">
-                  {variant.compareAtPriceMinor !== null && <span className="text-zinc-400 line-through">{money(variant.compareAtPriceMinor)}</span>}
-                  <span>{money(variant.priceMinor)}</span>
-                  <button className="rounded-lg border border-zinc-950 px-3 py-1 font-medium text-zinc-950 hover:bg-zinc-950 hover:text-white"
-                    onClick={() => { updateCart(variant.id, (cart.find((item) => item.variantId === variant.id)?.quantity || 0) + 1); setCartOpen(true); }}
-                    type="button">Agregar</button>
-                </span>
-              </li>)}
-            </ul>
-            <p className="mt-4 text-xs text-zinc-500">Disponibilidad sujeta a confirmación en tienda.</p>
-          </div>
-        </article>;
-      })}
-    </div>
-    <button className="fixed bottom-5 right-5 z-30 rounded-full bg-zinc-950 px-5 py-3 font-medium text-white shadow-xl"
-      onClick={() => setCartOpen(true)} type="button">Carrito · {cartCount}</button>
-    {cartOpen && <div className="fixed inset-0 z-40 bg-black/50" role="presentation">
-      <div aria-label="Carrito de compras" aria-modal="true" className="ml-auto h-full w-full max-w-xl overflow-y-auto bg-white p-5 shadow-xl sm:p-7" role="dialog">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-2xl font-semibold">Carrito</h2>
-          <button className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" onClick={() => setCartOpen(false)} type="button">Cerrar</button>
-        </div>
-        {savedOrders.length > 0 && <div className="mt-5 rounded-lg border border-zinc-200 p-3 text-sm">
-          <p className="font-medium">Pedidos QR pendientes de seguimiento</p>
-          <div className="mt-2 flex flex-wrap gap-2">{savedOrders.map((order) => <button
-            className="rounded border border-zinc-300 px-2 py-1 disabled:bg-zinc-100" disabled={receipt?.id === order.id}
-            key={order.id} onClick={() => { setReceipt(order); setProofError(""); }} type="button">{order.number}</button>)}</div>
+
+    <section className="xp-container flex flex-col items-start gap-12 pb-24 pt-2 lg:flex-row">
+      <aside aria-label="Filtros" className={`${filtersOpen ? "flex" : "hidden"} w-full flex-col lg:flex lg:w-[260px] lg:shrink-0`}>
+        {options.audiences.length > 0 && <div className="flex flex-col gap-3.5 border-t border-line py-5">
+          <span className={filterTitle}>Público</span>
+          {options.audiences.map((value) => <label className="flex cursor-pointer items-center gap-2.5 text-sm" key={value}>
+            <input checked={audience === value} className="size-[18px] accent-ink" onChange={() => update({ publico: audience === value ? "" : value })} type="checkbox" />
+            {titleCase(value)}<span className="ml-auto text-xs text-graphite">{count(products, "audience", value)}</span>
+          </label>)}
         </div>}
-        {receipt ? <div className="mt-6 rounded-xl border border-green-200 bg-green-50 p-5">
-          <p className="font-semibold">Pedido {receipt.number} {receipt.status === "confirmed" ? "confirmado" : "registrado como pendiente"}</p>
-          <p className="mt-2 text-sm">Total: {money(receipt.totalMinor)}.</p>
-          {receipt.paymentMethod === "qr" && <div className="mt-5 rounded-lg border border-green-200 bg-white p-4">
-            <h3 className="font-semibold">Transferencia por QR</h3>
-            {receipt.paymentStatus === "verified" ?
-              <p className="mt-2 text-sm">El administrador verificó el abono. El pedido seguirá su proceso de confirmación y recojo.</p> :
-              receipt.paymentStatus === "submitted" ?
-              <p className="mt-2 text-sm">Comprobante recibido. El administrador verificará el abono en su banca antes de confirmar el pedido.</p> : <>
-                {receipt.paymentStatus === "rejected" && <p className="mt-2 text-sm text-red-700">El comprobante anterior fue rechazado. Consulta con el negocio y sube uno nuevo si corresponde.</p>}
-                {qrProfile?.qrUrl ? <>
-                  <p className="mt-2 text-sm">Escanea o descarga el QR vigente. Transfiere el total exacto y comprueba el beneficiario en tu aplicación bancaria.</p>
-                  <Image alt="QR de transferencia vigente" className="mx-auto mt-4 max-h-72 w-auto rounded-lg border object-contain"
-                    height={288} src={qrProfile.qrUrl} unoptimized width={288} />
-                  <a className="mt-3 inline-block text-sm text-blue-800 underline" download="xpander-qr.png" href={qrProfile.qrUrl}>Descargar QR</a>
-                  <p className="mt-1 text-xs text-zinc-600">Vigente hasta {qrProfile.qrExpiresOn}. Incluye {receipt.number} como referencia si tu banco lo permite.</p>
-                </> : <p className="mt-2 text-sm text-amber-800">El QR ya no está disponible. Escribe al negocio antes de realizar una transferencia.</p>}
-                <form className="mt-5 space-y-3 border-t pt-4" onSubmit={(event) => void uploadProof(event)}>
-                  <label className="block text-sm">Subir comprobante PNG, JPEG o PDF *
-                    <input accept="image/png,image/jpeg,application/pdf" className="mt-2 block w-full" required type="file"
-                      onChange={(event) => setProofFile(event.target.files?.[0] || null)} />
-                  </label>
-                  <button className="rounded-lg bg-zinc-950 px-4 py-2 text-sm text-white disabled:opacity-50"
-                    disabled={!proofFile || proofBusy} type="submit">{proofBusy ? "Subiendo…" : "Enviar comprobante"}</button>
-                </form>
-              </>}
-            {proofError && <p className="mt-3 text-sm text-red-700" role="alert">{proofError}</p>}
-            <button className="mt-4 text-sm text-blue-800 underline" onClick={() => void refreshPayment()}
-              type="button">Consultar estado del pago</button>
+        {options.brands.length > 0 && <div className="flex flex-col gap-3.5 border-t border-line py-5">
+          <span className={filterTitle}>Marca</span>
+          {options.brands.map((value) => <label className="flex cursor-pointer items-center gap-2.5 text-sm" key={value}>
+            <input checked={brand === value} className="size-[18px] accent-ink" onChange={() => update({ marca: brand === value ? "" : value })} type="checkbox" />
+            {value}<span className="ml-auto text-xs text-graphite">{count(products, "brandName", value)}</span>
+          </label>)}
+        </div>}
+        {options.sizes.length > 0 && <div className="flex flex-col gap-3.5 border-t border-line py-5">
+          <span className={filterTitle}>Talla</span>
+          <div className="grid grid-cols-4 gap-1.5">
+            {options.sizes.map((value) => {
+              const selected = sizes.includes(value);
+              return <button aria-pressed={selected} className={`h-11 border font-mono text-[13px] ${selected ? "border-ink bg-ink text-white" : "border-line bg-white hover:border-ink"}`}
+                key={value} onClick={() => update({ talla: (selected ? sizes.filter((size) => size !== value) : [...sizes, value]).join(",") })}
+                type="button">{value}</button>;
+            })}
+          </div>
+        </div>}
+        {options.colors.length > 0 && <div className="flex flex-col gap-3.5 border-t border-line py-5">
+          <span className={filterTitle}>Color</span>
+          <div className="flex flex-wrap gap-2.5">
+            {options.colors.map((value) => {
+              const swatch = colorSwatch(value);
+              const selected = color === value;
+              return <button aria-label={titleCase(value)} aria-pressed={selected} key={value} title={titleCase(value)}
+                className={`size-8 rounded-full border-2 border-white ${selected ? "shadow-[0_0_0_1px_#141414]" : "shadow-[0_0_0_1px_#e2e2e2] hover:shadow-[0_0_0_1px_#5e5e5e]"}`}
+                onClick={() => update({ color: selected ? "" : value })}
+                style={{ background: swatch ?? "conic-gradient(#141414 0 25%, #8a8a8a 0 50%, #ededed 0 75%, #5e5e5e 0)" }} type="button" />;
+            })}
+          </div>
+          {color && <span className="text-[13px] text-graphite">Color: {titleCase(color)}</span>}
+        </div>}
+        {options.maxPrice > options.minPrice && <div className="flex flex-col gap-3.5 border-t border-line py-5">
+          <span className={filterTitle}>Precio</span>
+          <label className="flex justify-between text-sm" htmlFor="precio"><span>Hasta</span><span className="font-mono">{formatBOB(priceLimit * 100)}</span></label>
+          <input className="w-full accent-ink" id="precio" max={options.maxPrice} min={options.minPrice} onChange={(event) =>
+            update({ precio: Number(event.target.value) >= options.maxPrice ? "" : event.target.value })} type="range" value={priceLimit} />
+        </div>}
+        <div className="border-t border-line py-5">
+          <button className="min-h-11 text-sm font-medium underline underline-offset-4 disabled:text-graphite disabled:no-underline"
+            disabled={activeFilters === 0 && !style && !query} onClick={clearFilters} type="button">Limpiar filtros</button>
+        </div>
+      </aside>
+
+      <div className="flex w-full min-w-0 flex-1 flex-col gap-12">
+        {filtered.length === 0 ? <p className="border border-dashed border-line p-12 text-center text-graphite">No hay productos con estos filtros.</p> :
+          <div className="grid grid-cols-2 gap-x-3 gap-y-9 sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] sm:gap-x-5">
+            {visible.map((product) => <ProductCard key={product.id} product={product} />)}
           </div>}
-          <p className="mt-4 text-sm">Abre WhatsApp y envía el detalle del pedido al negocio.</p>
-          <a className="mt-4 inline-block rounded-lg bg-green-700 px-4 py-3 font-medium text-white"
-            href={receipt.whatsappUrl} rel="noopener noreferrer" target="_blank">Abrir WhatsApp para enviar</a>
-          <p className="mt-3 text-xs text-green-900">El pedido quedó guardado aunque cierres WhatsApp. Abrir el enlace no confirma que se haya enviado el mensaje.</p>
-          {receipt.paymentMethod === "qr" && <button className="mt-4 block text-sm underline" type="button"
-            onClick={() => setReceipt(null)}>Hacer otro pedido</button>}
-        </div> : cartLines.length === 0 ? <p className="mt-8 text-zinc-600">Tu carrito está vacío.</p> : <>
-          <ul className="mt-6 divide-y divide-zinc-200">{cartLines.map((line) => <li className="flex items-start gap-3 py-4" key={line.variantId}>
-            <div className="min-w-0 flex-1">
-              <p className="font-medium">{line.product.name}</p>
-              <p className="text-sm text-zinc-600">{sizeLabel(line.variant)} · código {line.variant.code}</p>
-              <p className="text-sm">{money(line.variant.priceMinor)} por unidad</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button aria-label={`Quitar una unidad de ${line.product.name}`} className="rounded border px-2" disabled={busy}
-                onClick={() => updateCart(line.variantId, line.quantity - 1)} type="button">−</button>
-              <span>{line.quantity}</span>
-              <button aria-label={`Agregar una unidad de ${line.product.name}`} className="rounded border px-2" disabled={busy || line.quantity >= 20}
-                onClick={() => updateCart(line.variantId, line.quantity + 1)} type="button">+</button>
-            </div>
-          </li>)}</ul>
-          <p className="mt-3 text-right text-lg font-semibold">Total estimado: {money(total)}</p>
-          <p className="mt-2 text-sm text-zinc-600">El servidor confirmará precios y disponibilidad antes de registrar el pedido. El recojo será en la sucursal elegida.</p>
-          {error && <p className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-          <form className="mt-6 space-y-4 border-t border-zinc-200 pt-6" onSubmit={(event) => void submit(event)}>
-            <h3 className="text-lg font-semibold">Datos para el recojo</h3>
-            <label className="block text-sm">Sucursal *
-              <select className="mt-1 w-full rounded-lg border border-zinc-300 p-2" disabled={busy} onChange={(event) => setPickupBranchId(Number(event.target.value))} required value={pickupBranchId}>
-                <option value={0}>Selecciona una sucursal</option>
-                {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{branch.address ? ` · ${branch.address}` : ""}</option>)}
-              </select>
-            </label>
-            {selectedBranch?.instructions && <p className="text-sm text-zinc-600">{selectedBranch.instructions}</p>}
-            {branchError && <p className="text-sm text-red-700">{branchError}</p>}
-            <label className="block text-sm">Nombre *
-              <input className="mt-1 w-full rounded-lg border border-zinc-300 p-2" disabled={busy} maxLength={120}
-                onChange={(event) => setCustomerName(event.target.value)} required value={customerName} />
-            </label>
-            <label className="block text-sm">Teléfono *
-              <input className="mt-1 w-full rounded-lg border border-zinc-300 p-2" disabled={busy} inputMode="tel" maxLength={25}
-                onChange={(event) => setCustomerPhone(event.target.value)} required type="tel" value={customerPhone} />
-            </label>
-            <label className="block text-sm">Nota (opcional)
-              <textarea className="mt-1 w-full rounded-lg border border-zinc-300 p-2" disabled={busy} maxLength={500}
-                onChange={(event) => setCustomerNote(event.target.value)} rows={3} value={customerNote} />
-            </label>
-            <fieldset className="space-y-2 rounded-lg border border-zinc-200 p-4 text-sm">
-              <legend className="px-1 font-medium">Forma de pago</legend>
-              <label className="flex items-center gap-2"><input checked={paymentMethod === "whatsapp"} disabled={busy}
-                onChange={() => setPaymentMethod("whatsapp")} type="radio" />Coordinar por WhatsApp</label>
-              {qrProfile?.qrUrl && <label className="flex items-center gap-2"><input checked={paymentMethod === "qr"} disabled={busy}
-                onChange={() => setPaymentMethod("qr")} type="radio" />Transferir por QR y subir comprobante</label>}
-            </fieldset>
-            <button className="w-full rounded-lg bg-zinc-950 px-4 py-3 font-medium text-white disabled:opacity-50"
-              disabled={busy || !pickupBranchId} type="submit">{busy ? "Registrando…" : "Registrar pedido"}</button>
-          </form>
-        </>}
+        {filtered.length > 0 && <div className="flex flex-col items-center gap-4">
+          <span className="font-mono text-xs text-graphite">Mostrando {visible.length} de {filtered.length}</span>
+          <div className="h-0.5 w-[200px] bg-line"><div className="h-0.5 bg-ink" style={{ width: `${(visible.length / filtered.length) * 100}%` }} /></div>
+          {visible.length < filtered.length && <button className="xp-btn border border-ink bg-white px-9 text-ink hover:bg-ink hover:text-white"
+            onClick={() => setLimit({ key: filterKey, count: shown + pageSize })} type="button">Cargar más</button>}
+        </div>}
       </div>
-    </div>}
+    </section>
   </>;
 }

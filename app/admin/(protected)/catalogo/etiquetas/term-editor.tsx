@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { Feedback, Modal, ui } from "../../../admin-ui";
 
 type Kind = "style" | "audience";
 type Term = { id: number; kind: Kind; name: string; productCount: number };
@@ -71,55 +72,50 @@ export default function TermEditor() {
     } finally { setBusy(false); }
   }
 
-  return <div className="space-y-6">
-    {error && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
-    {notice && <p className="rounded-lg bg-green-50 p-4 text-sm text-green-800" role="status">{notice}</p>}
-    <form className="rounded-xl border border-zinc-200 bg-white p-6" onSubmit={(event) => void save(event)}>
-      <h2 className="text-lg font-semibold">{editing ? "Modificar elemento" : "Agregar elemento"}</h2>
-      <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_2fr_auto] sm:items-end">
-        <label className="text-sm">Tipo *
-          <select className="mt-1 block w-full rounded-lg border border-zinc-300 p-2" disabled={busy || !!editing}
-            onChange={(event) => setKind(event.target.value as Kind)} value={kind}>
+  return <div className="flex flex-col gap-4">
+    <form className={`${ui.card} ${ui.cardPad} flex flex-col gap-3`} onSubmit={(event) => void save(event)}>
+      <h2 className={ui.cardTitle}>{editing ? `Modificar «${editing.name}»` : "Nuevo estilo o público"}</h2>
+      <div className="grid gap-3 sm:grid-cols-[200px_1fr_auto] sm:items-end">
+        <label className={ui.label}>Tipo *
+          <select className={ui.input} disabled={busy || !!editing} onChange={(event) => setKind(event.target.value as Kind)} value={kind}>
             {kinds.map((item) => <option key={item.value} value={item.value}>{item.title}</option>)}
           </select>
         </label>
-        <label className="text-sm">Nombre *
-          <input className="mt-1 block w-full rounded-lg border border-zinc-300 p-2" disabled={busy}
-            maxLength={120} onChange={(event) => setName(event.target.value.toLocaleUpperCase("es-BO"))}
+        <label className={ui.label}>Nombre *
+          <input className={ui.input} disabled={busy} maxLength={120} onChange={(event) => setName(event.target.value.toLocaleUpperCase("es-BO"))}
             placeholder={kinds.find((item) => item.value === kind)?.example} required value={name} />
         </label>
-        <button className="rounded-lg bg-zinc-950 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          disabled={busy} type="submit">Guardar</button>
+        <button className={ui.primary} disabled={busy} type="submit">Guardar</button>
       </div>
-      {editing && <button className="mt-3 text-sm underline" disabled={busy} onClick={() => { setEditing(null); setName(""); }} type="button">Cancelar edición</button>}
+      {editing && <button className={`${ui.link} self-start`} disabled={busy} onClick={() => { setEditing(null); setName(""); }} type="button">Cancelar edición</button>}
+      <Feedback error={error} notice={notice} />
     </form>
-    {kinds.map((group) => <section className="rounded-xl border border-zinc-200 bg-white p-6" key={group.value}>
-      <h2 className="text-lg font-semibold">{group.title}</h2>
-      {terms.filter((term) => term.kind === group.value).length === 0 ?
-        <p className="mt-3 text-sm text-zinc-600">Aún no hay elementos.</p> :
-        <ul className="mt-3 divide-y divide-zinc-100">
-          {terms.filter((term) => term.kind === group.value).map((term) => <li className="flex flex-wrap items-center gap-3 py-3" key={term.id}>
-            <span className="mr-auto font-medium">{term.name} <span className="text-sm font-normal text-zinc-500">· {term.productCount} producto(s)</span></span>
-            <button className="text-sm text-blue-800 underline" disabled={busy} onClick={() => {
-              setEditing(term); setKind(term.kind); setName(term.name); setError("");
-            }} type="button">Modificar</button>
-            <button className="text-sm text-red-700 underline" disabled={busy} onClick={() => setDeleting(term)} type="button">Eliminar</button>
-          </li>)}
-        </ul>}
-    </section>)}
-    {deleting && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="presentation">
-      <div aria-labelledby="delete-term-title" aria-modal="true" className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" role="dialog">
-        <h2 className="text-xl font-semibold" id="delete-term-title">Eliminar elemento</h2>
-        <p className="mt-3 text-sm">Se eliminará «{deleting.name}».</p>
-        {deleting.productCount > 0 && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-          Hay {deleting.productCount} producto(s) asociados. Permanecerán registrados, pero perderán este dato.
-        </p>}
-        <div className="mt-6 flex justify-end gap-3">
-          <button className="rounded-lg border px-4 py-2 text-sm" disabled={busy} onClick={() => setDeleting(null)} type="button">Cancelar</button>
-          <button className="rounded-lg bg-red-700 px-4 py-2 text-sm text-white disabled:opacity-50" disabled={busy}
-            onClick={() => void remove()} type="button">Sí, eliminar</button>
-        </div>
+    <div className="grid items-start gap-4 md:grid-cols-2">
+      {kinds.map((group) => {
+        const items = terms.filter((term) => term.kind === group.value);
+        return <section className={ui.card} key={group.value}>
+          <div className="flex items-baseline justify-between border-b border-line px-5 py-4 sm:px-6">
+            <h2 className={ui.cardTitle}>{group.title}</h2><span className="font-mono text-xs text-graphite">{items.length}</span>
+          </div>
+          {items.length === 0 ? <p className="m-0 p-5 text-sm text-graphite sm:px-6">Aún no hay elementos.</p> :
+            <ul className="m-0 list-none p-0">{items.map((term) => <li className={`flex items-center gap-3 border-t border-mist px-5 py-3 first:border-0 sm:px-6 ${editing?.id === term.id ? "bg-soft" : ""}`} key={term.id}>
+              <span className="mr-auto flex flex-col"><span className="text-sm font-medium">{term.name}</span>
+                <span className="font-mono text-[11px] text-graphite">{term.productCount} producto(s)</span></span>
+              <button className={ui.quiet} disabled={busy} onClick={() => { setEditing(term); setKind(term.kind); setName(term.name); setError(""); }} type="button">Editar</button>
+              <button className={ui.dangerLink} disabled={busy} onClick={() => setDeleting(term)} type="button">Eliminar</button>
+            </li>)}</ul>}
+        </section>;
+      })}
+    </div>
+    {deleting && <Modal labelledBy="delete-term-title" onClose={() => !busy && setDeleting(null)} title="Eliminar elemento">
+      <p className="mt-3 text-sm text-body">Se eliminará «{deleting.name}».</p>
+      {deleting.productCount > 0 && <p className="mt-3 border-l-2 border-amber-600 bg-amber-50 p-3 text-sm text-amber-900">
+        Hay {deleting.productCount} producto(s) asociados. Permanecerán registrados, pero perderán este dato.
+      </p>}
+      <div className="mt-6 flex justify-end gap-3">
+        <button className={ui.secondary} disabled={busy} onClick={() => setDeleting(null)} type="button">Cancelar</button>
+        <button className={ui.danger} disabled={busy} onClick={() => void remove()} type="button">Sí, eliminar</button>
       </div>
-    </div>}
+    </Modal>}
   </div>;
 }

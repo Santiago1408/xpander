@@ -20,14 +20,14 @@ No se crean marcas, productos, medios, sucursales ni usuarios ficticios. El inve
 
 Las [fichas y variantes](07-productos-y-catalogo.md) se registran desde una sola pantalla. Las [marcas, estilos y públicos](06-marcas-y-tallas.md) se administran en una misma pantalla.
 
-Las migraciones `004` a `013` incorporan el acceso, la landing, el catálogo simplificado, el inventario y los pedidos. La `014` registra estilos y públicos. La `015` permite retirar inventario de prueba. La `016` autoriza sustituir imágenes borradas en publicaciones históricas. La `017` crea los datos del negocio; la `018` registra el vencimiento del QR; la `019` separa estados de pago y guarda comprobantes privados; la `020` protege la identidad del administrador que revisó un pago. No se modifican migraciones aplicadas. La limpieza de datos de prueba se ejecuta [por separado](10-reinicio-datos-prueba.md).
+Las migraciones `004` a `013` incorporan el acceso, la landing, el catálogo simplificado, el inventario y los pedidos. La `014` registra estilos y públicos. La `015` permite retirar inventario de prueba. La `016` autoriza sustituir imágenes borradas en publicaciones históricas. La `017` crea los datos del negocio; la `018` registra el vencimiento del QR; la `019` separa estados de pago y guarda comprobantes privados; la `020` protege la identidad del administrador que revisó un pago; la `021` registra los tamaños de imagen; la `022` añade la forma de entrega (recojo o envío) y quién canceló un pedido. No se modifican migraciones aplicadas. La limpieza de datos de prueba se ejecuta [por separado](10-reinicio-datos-prueba.md).
 
 ## Reglas e invariantes
 
 - Un producto puede estar en borrador, activo o archivado. Tiene código de cuatro dígitos y cada variante uno de seis. Se conserva un SKU interno para referencias históricas; el administrador usa los códigos numéricos.
 - Toda variante necesita talla alfabética, numérica o ambas. La API impide repetir una talla del mismo sistema dentro de un producto y valida las entradas de stock por sucursal.
 - Las existencias no pueden ser negativas. Cada inserción en `stock_movements` actualiza `branch_stock` en la misma transacción; un saldo negativo rechaza toda la inserción. No se deben editar directamente saldos ni movimientos: para corregirlos se registra un ajuste.
-- El flujo actual usa `pending` y `confirmed`; el esquema conserva `cancelled` para compatibilidad, sin acción de cancelación en el panel. Un pedido QR solo se confirma tras verificar el abono bancario. Al confirmar, la API descuenta existencias en una transacción; la base impide saldos negativos y una segunda salida para el mismo ítem.
+- Los estados del pedido son `pending`, `confirmed` y `cancelled`. El dueño puede cancelar un pedido pendiente cuyo pago no fue verificado; no se descuenta inventario. Un pedido QR solo se confirma tras verificar el abono bancario. Al confirmar, la API descuenta existencias en una transacción; la base impide saldos negativos y una segunda salida para el mismo ítem.
 - `client_request_id` evita duplicar un pedido cuando el cliente reintenta la solicitud. Los datos históricos del pedido no cambian si luego se editan sucursal, catálogo o precio.
 - La papelera permite retirar productos, variantes, imágenes y secciones. Los productos y variantes con pedidos históricos no se borran definitivamente. Una imagen sí puede borrarse: primero se reemplaza por un marcador en las publicaciones que la usaban. Las marcas, estilos y públicos se administran en una misma pantalla y avisan si están asociados a productos.
 - `updated_at` se actualizará desde la API en cada modificación. La base establece el valor inicial, no lo cambia automáticamente.
@@ -43,7 +43,7 @@ sudo docker compose -f compose.dev.yaml exec -T database psql -U xpander -d xpan
 sudo docker compose -f compose.dev.yaml exec -T database psql -U xpander -d xpander -c '\dt'
 ```
 
-Debes ver veinte versiones aplicadas (`001_foundation.sql` a `020_payment_review_reviewer_fk.sql`) y las tablas correspondientes. Repetir `up --build -d` no debe duplicarlas. Si el servicio `migrate` falla, consulta sus registros antes de intentar cambios manuales en la base.
+Debes ver veintidós versiones aplicadas (`001_foundation.sql` a `022_order_delivery_cancel.sql`) y las tablas correspondientes. Repetir `up --build -d` no debe duplicarlas. Si el servicio `migrate` falla, consulta sus registros antes de intentar cambios manuales en la base.
 
 Para ejecutar explícitamente el migrador después de añadir una nueva migración:
 

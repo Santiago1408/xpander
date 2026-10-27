@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useState, type FormEvent } from "react";
 import { socialPlatforms } from "../../../social-platforms";
+import { Feedback, Pill, ui } from "../../admin-ui";
 
 type Profile = { phone: string; socialLinks: Record<string, string>; qrMediaId: number | null; qrUrl: string; qrExpiresOn: string };
 type Media = { id: number; altText: string; isDeleted: boolean; purpose: "photo" | "qr" };
@@ -72,58 +73,73 @@ export default function BusinessEditor() {
     finally { setBusy(false); }
   }
 
-  if (!profile) return <p role={error ? "alert" : undefined}>{error || "Cargando datos…"}</p>;
-  return <form className="space-y-7" onSubmit={(event) => void save(event)}>
-    <fieldset className="space-y-6 rounded-xl border border-zinc-200 bg-white p-6" disabled={busy}>
-      <label className="block text-sm font-medium">Teléfono *
-        <input className="mt-2 w-full rounded-lg border border-zinc-300 p-3" maxLength={40} required type="tel"
-          onChange={(event) => setProfile({ ...profile, phone: event.target.value })} value={profile.phone} />
-      </label>
-      <div>
-        <h2 className="font-semibold">Redes sociales del negocio</h2>
-        <p className="mt-1 text-sm text-zinc-500">Solo se mostrarán los enlaces que completes en las funciones públicas que los usen.</p>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          {socialPlatforms.map(({ key, label }) => <label className="text-sm font-medium" key={key}>{label}
-            <input className="mt-2 w-full rounded-lg border border-zinc-300 p-3" placeholder="https://..." type="url"
-              onChange={(event) => setProfile({ ...profile, socialLinks: { ...profile.socialLinks, [key]: event.target.value } })}
-              value={profile.socialLinks[key] || ""} />
-          </label>)}
+  if (!profile) return <p className="text-sm text-graphite" role={error ? "alert" : undefined}>{error || "Cargando datos…"}</p>;
+  const today = dateString(new Date());
+  const qrExpired = Boolean(profile.qrMediaId && profile.qrExpiresOn && profile.qrExpiresOn < today);
+  return <form className="flex flex-col gap-5" onSubmit={(event) => void save(event)}>
+    <Feedback error={error} notice={notice} />
+    <fieldset className="m-0 grid items-start gap-4 border-0 p-0 xl:grid-cols-[minmax(0,1fr)_400px]" disabled={busy}>
+      <section className={`${ui.card} ${ui.cardPad} flex flex-col gap-5`}>
+        <div>
+          <h2 className={ui.cardTitle}>Contacto</h2>
+          <p className={`${ui.hint} mt-1`}>El teléfono se muestra en el pie de la tienda. El número que recibe los pedidos por WhatsApp se configura en el servidor y no cambia aquí.</p>
         </div>
-      </div>
-      <div>
-        <h2 className="font-semibold">QR de transferencia bancaria</h2>
-        <p className="mt-1 text-sm text-zinc-500">Hay un solo QR vigente. Indica la fecha real de vencimiento del banco; al renovarlo, reemplaza la imagen y la fecha. Cambiarlo aquí no verifica pagos automáticamente.</p>
-        {profile.qrMediaId && <Image alt="QR bancario actual" className="mt-4 max-h-64 w-auto rounded-lg border object-contain"
-          height={256} src={profile.qrUrl || `/api/admin/media/${profile.qrMediaId}`} unoptimized width={256} />}
-        <div className="mt-4 flex flex-wrap items-end gap-4">
-          <label className="text-sm">Subir QR PNG, JPEG o WebP
-            <input accept="image/png,image/jpeg,image/webp" className="mt-2 block text-sm" type="file"
-              onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ""; }} />
-          </label>
-          <label className="text-sm">Elegir del banco
-            <select className="mt-2 block rounded-lg border border-zinc-300 p-2"
-              onChange={(event) => {
-                const id = Number(event.target.value) || null;
-                setProfile({ ...profile, qrMediaId: id, qrUrl: id ? `/api/admin/media/${id}` : "",
-                  qrExpiresOn: id ? suggestedExpiry() : "" });
-              }} value={profile.qrMediaId || 0}>
-              <option value={0}>Sin QR</option>
-              {library.filter((image) => !image.isDeleted && image.purpose === "qr").map((image) => <option key={image.id} value={image.id}>{image.altText || `Imagen ${image.id}`}</option>)}
-            </select>
-          </label>
-          {profile.qrMediaId && <button className="text-sm text-red-700 underline" type="button"
-            onClick={() => setProfile({ ...profile, qrMediaId: null, qrUrl: "", qrExpiresOn: "" })}>Quitar QR</button>}
+        <label className={`${ui.label} max-w-sm`}>Teléfono *
+          <input className={`${ui.input} font-mono`} maxLength={40} required type="tel"
+            onChange={(event) => setProfile({ ...profile, phone: event.target.value })} value={profile.phone} />
+        </label>
+        <div className="border-t border-line pt-5">
+          <h3 className="m-0 text-sm font-semibold">Redes sociales del negocio</h3>
+          <p className={`${ui.hint} mt-1`}>Solo se muestran los enlaces completados. Deben empezar con https://.</p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            {socialPlatforms.map(({ key, label }) => <label className={ui.label} key={key}>{label}
+              <input className={ui.input} placeholder="https://..." type="url"
+                onChange={(event) => setProfile({ ...profile, socialLinks: { ...profile.socialLinks, [key]: event.target.value } })}
+                value={profile.socialLinks[key] || ""} />
+            </label>)}
+          </div>
         </div>
-        {profile.qrMediaId && <label className="mt-4 block max-w-xs text-sm font-medium">Vencimiento del QR *
-          <input className="mt-2 w-full rounded-lg border border-zinc-300 p-3" max={suggestedExpiry()}
-            min={dateString(new Date())} required type="date"
-            onChange={(event) => setProfile({ ...profile, qrExpiresOn: event.target.value })}
-            value={profile.qrExpiresOn || ""} />
-        </label>}
-      </div>
+      </section>
+      <section className={`${ui.card} ${ui.cardPad} flex flex-col gap-4 xl:sticky xl:top-6`}>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className={ui.cardTitle}>QR de transferencia</h2>
+          {profile.qrMediaId ? <Pill tone={qrExpired ? "danger" : "solid"}>{qrExpired ? "Vencido" : "Configurado"}</Pill> : <Pill tone="dashed">Sin QR</Pill>}
+        </div>
+        <p className={`${ui.hint} m-0`}>Hay un solo QR vigente. Indica la fecha real de vencimiento del banco. Cambiarlo aquí no verifica pagos automáticamente.</p>
+        <div className="flex aspect-square items-center justify-center border border-line bg-white p-4">
+          {profile.qrMediaId ? <Image alt="QR bancario actual" className="max-h-full w-auto object-contain"
+            height={320} src={profile.qrUrl || `/api/admin/media/${profile.qrMediaId}`} unoptimized width={320} /> :
+            <span className="font-mono text-xs uppercase tracking-[0.08em] text-graphite">Sin QR activo</span>}
+        </div>
+        <label className={ui.label}>Subir QR PNG, JPEG o WebP
+          <input accept="image/png,image/jpeg,image/webp" className={ui.file} type="file"
+            onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ""; }} />
+        </label>
+        <label className={ui.label}>O elegir del banco
+          <select className={ui.input}
+            onChange={(event) => {
+              const id = Number(event.target.value) || null;
+              setProfile({ ...profile, qrMediaId: id, qrUrl: id ? `/api/admin/media/${id}` : "",
+                qrExpiresOn: id ? suggestedExpiry() : "" });
+            }} value={profile.qrMediaId || 0}>
+            <option value={0}>Sin QR</option>
+            {library.filter((image) => !image.isDeleted && image.purpose === "qr").map((image) => <option key={image.id} value={image.id}>{image.altText || `Imagen ${image.id}`}</option>)}
+          </select>
+        </label>
+        {profile.qrMediaId && <>
+          <label className={ui.label}>Vencimiento del QR *
+            <input className={`${ui.input} font-mono`} max={suggestedExpiry()} min={today} required type="date"
+              onChange={(event) => setProfile({ ...profile, qrExpiresOn: event.target.value })}
+              value={profile.qrExpiresOn || ""} />
+          </label>
+          <button className={`${ui.dangerLink} self-start`} type="button"
+            onClick={() => setProfile({ ...profile, qrMediaId: null, qrUrl: "", qrExpiresOn: "" })}>Quitar QR</button>
+        </>}
+      </section>
     </fieldset>
-    <button className="rounded-lg bg-zinc-950 px-5 py-3 font-medium text-white disabled:opacity-50" disabled={busy} type="submit">Guardar cambios</button>
-    {error && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
-    {notice && <p className="rounded-lg bg-green-50 p-4 text-sm text-green-800" role="status">{notice}</p>}
+    <div className="sticky bottom-20 z-30 flex flex-wrap items-center gap-3 border border-line bg-white p-4 shadow-lg lg:bottom-4">
+      <button className={ui.primary} disabled={busy} type="submit">{busy ? "Guardando…" : "Guardar cambios"}</button>
+      <span className="text-[13px] text-graphite">Los cambios se aplican al guardar; no requieren publicar la landing.</span>
+    </div>
   </form>;
 }

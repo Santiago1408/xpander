@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { EmptyState, Feedback, ui } from "../../admin-ui";
 
 type Branch = { id: number; code: string; name: string; address: string; instructions: string };
 
@@ -51,33 +52,42 @@ export default function BranchEditor() {
     } finally { setBusy(false); }
   }
 
-  return <div className="space-y-5">
-    {error && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
-    {notice && <p className="rounded-lg bg-green-50 p-4 text-sm text-green-800" role="status">{notice}</p>}
-    {!branches ? <p>Cargando…</p> : branches.length === 0 ?
-      <p className="rounded-xl border border-dashed border-zinc-300 p-6">No hay sucursales activas.</p> :
-      <form className="space-y-4 rounded-xl border border-zinc-200 bg-white p-6" onSubmit={(event) => void save(event)}>
-        {branches.length > 1 && <label className="block text-sm">Sucursal *
-          <select className="mt-1 block w-full rounded-lg border border-zinc-300 p-2" disabled={busy}
-            onChange={(event) => { const branch = branches.find((item) => item.id === Number(event.target.value)); if (branch) select(branch); }} value={selectedId}>
-            {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-          </select>
-        </label>}
-        <p className="text-xs text-zinc-500">Código interno: {branches.find((branch) => branch.id === selectedId)?.code}</p>
-        <label className="block text-sm">Nombre *
-          <input className="mt-1 block w-full rounded-lg border border-zinc-300 p-2" disabled={busy} maxLength={120}
-            onChange={(event) => setName(event.target.value.toLocaleUpperCase("es-BO"))} required value={name} />
-        </label>
-        <label className="block text-sm">Dirección para recojo (opcional)
-          <textarea className="mt-1 block w-full rounded-lg border border-zinc-300 p-2" disabled={busy} maxLength={300}
-            onChange={(event) => setAddress(event.target.value)} rows={2} value={address} />
-        </label>
-        <label className="block text-sm">Indicaciones de recojo (opcional)
-          <textarea className="mt-1 block w-full rounded-lg border border-zinc-300 p-2" disabled={busy} maxLength={500}
-            onChange={(event) => setInstructions(event.target.value)} rows={3} value={instructions} />
-        </label>
-        <button className="rounded-lg bg-zinc-950 px-5 py-3 text-sm font-medium text-white disabled:opacity-50"
-          disabled={busy} type="submit">{busy ? "Guardando…" : "Guardar sucursal"}</button>
-      </form>}
+  const selected = branches?.find((branch) => branch.id === selectedId);
+  return <div className="flex flex-col gap-5">
+    <Feedback error={error} notice={notice} />
+    {!branches ? <p className="text-sm text-graphite">Cargando…</p> : branches.length === 0 ?
+      <EmptyState>No hay sucursales activas.</EmptyState> :
+      <div className="grid items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <ul className="m-0 flex list-none flex-col gap-px bg-line p-0">
+          {branches.map((branch) => <li key={branch.id}>
+            <button aria-pressed={branch.id === selectedId} className={`flex w-full flex-col gap-1 p-4 text-left ${branch.id === selectedId ? "bg-white shadow-[inset_3px_0_0_#141414]" : "bg-white/70 hover:bg-white"}`}
+              disabled={busy} onClick={() => select(branch)} type="button">
+              <span className="text-sm font-semibold">{branch.name}</span>
+              <span className="font-mono text-[11px] text-graphite">{branch.code}</span>
+              {branch.address && <span className="text-xs text-graphite">{branch.address}</span>}
+            </button>
+          </li>)}
+        </ul>
+        <form className={`${ui.card} ${ui.cardPad} flex flex-col gap-4`} onSubmit={(event) => void save(event)}>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className={ui.cardTitle}>Datos visibles para el cliente</h2>
+            <span className="font-mono text-xs text-graphite">Código interno: {selected?.code}</span>
+          </div>
+          <label className={ui.label}>Nombre *
+            <input className={ui.input} disabled={busy} maxLength={120}
+              onChange={(event) => setName(event.target.value.toLocaleUpperCase("es-BO"))} required value={name} />
+          </label>
+          <label className={ui.label}>Dirección para recojo
+            <textarea className={ui.textarea} disabled={busy} maxLength={300}
+              onChange={(event) => setAddress(event.target.value)} rows={2} value={address} />
+          </label>
+          <label className={ui.label}>Indicaciones de recojo
+            <textarea className={ui.textarea} disabled={busy} maxLength={500}
+              onChange={(event) => setInstructions(event.target.value)} rows={3} value={instructions} />
+            <span className={ui.hint}>Se muestran al elegir la sucursal en el carrito. Los pedidos anteriores conservan los datos con los que se registraron.</span>
+          </label>
+          <button className={`${ui.primary} self-start`} disabled={busy} type="submit">{busy ? "Guardando…" : "Guardar sucursal"}</button>
+        </form>
+      </div>}
   </div>;
 }

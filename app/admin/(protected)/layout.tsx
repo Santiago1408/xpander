@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
-import LogoutButton from "./logout-button";
+import AdminShell from "./admin-shell";
 
 type AdminUser = {
   username: string;
@@ -28,28 +28,12 @@ async function AuthenticatedPanel({ children }: { children: ReactNode }) {
   }
   const user = (await response.json()) as AdminUser;
 
-  return (
-    <div className="min-h-screen bg-zinc-100 text-zinc-950">
-      <header className="border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 py-4">
-          <div>
-            <p className="text-sm font-semibold tracking-[0.25em]">XPANDER</p>
-            <p className="text-xs text-zinc-500">Administración</p>
-          </div>
-          <div className="flex items-center gap-4 text-sm">
-            <span className="hidden text-zinc-600 sm:inline">{user.displayName}</span>
-            <LogoutButton />
-          </div>
-        </div>
-      </header>
-      <main className="mx-auto max-w-5xl px-5 py-10">{children}</main>
-    </div>
-  );
+  return <AdminShell user={user}>{children}</AdminShell>;
 }
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <Suspense fallback={<p className="p-8 text-zinc-600">Verificando sesión…</p>}>
+    <Suspense fallback={<p className="p-8 font-mono text-xs uppercase tracking-[0.12em] text-graphite">Verificando sesión…</p>}>
       <AuthenticatedPanel>{children}</AuthenticatedPanel>
     </Suspense>
   );

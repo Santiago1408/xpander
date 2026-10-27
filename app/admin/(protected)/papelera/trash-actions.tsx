@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Modal, ui } from "../../admin-ui";
 
 export type TrashRef = { kind: string; id: number; label: string };
 
@@ -12,19 +13,16 @@ export function ConfirmPurge({ label, busy, onCancel, onConfirm, media = false }
   label: string; busy: boolean; onCancel: () => void; onConfirm: () => void; media?: boolean;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="presentation">
-      <div aria-labelledby="purge-title" aria-modal="true" className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" role="dialog">
-        <h2 className="text-xl font-semibold" id="purge-title">Confirmar eliminación definitiva</h2>
-        <p className="mt-3 text-sm text-zinc-700">Se eliminará «{label}» de forma permanente. No se podrá restaurar.</p>
-        {media && <p className="mt-3 text-sm text-amber-800">Si la imagen aparece en publicaciones históricas, allí se reemplazará por «Imagen eliminada». También dejará de mostrarse si está en la versión pública actual o si era el QR activo.</p>}
+    <Modal labelledBy="purge-title" onClose={() => !busy && onCancel()} title="Eliminar definitivamente">
+        <p className="mt-3 text-sm text-body">Se eliminará «{label}» de forma permanente. No se podrá restaurar.</p>
+        {media && <p className="mt-3 border-l-2 border-amber-600 bg-amber-50 p-3 text-sm text-amber-900">Si la imagen aparece en publicaciones históricas, allí se reemplazará por «Imagen eliminada». También dejará de mostrarse si está en la versión pública actual o si era el QR activo.</p>}
         <div className="mt-6 flex flex-wrap justify-end gap-3">
-          <button className="rounded-lg border border-zinc-300 px-4 py-2 text-sm" disabled={busy}
+          <button className={ui.secondary} disabled={busy}
             onClick={onCancel} type="button">Cancelar</button>
-          <button className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          <button className={ui.danger}
             disabled={busy} onClick={onConfirm} type="button">Sí, eliminar definitivamente</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -53,12 +51,12 @@ export default function TrashActions({ item, onChanged, notice = false }: {
   }
 
   return (
-    <div className={notice ? "rounded-lg border border-amber-200 bg-amber-50 p-4" : ""}>
-      {notice && <p className="text-sm font-medium text-amber-950">«{item.label}» se envió a la papelera.</p>}
-      <div className="mt-2 flex flex-wrap gap-3">
-        <button className="text-sm text-blue-800 underline disabled:opacity-50" disabled={busy}
+    <div className={notice ? "flex flex-wrap items-center gap-x-5 gap-y-2 border-l-2 border-ink bg-white p-4" : ""}>
+      {notice && <p className="m-0 mr-auto text-sm font-medium">«{item.label}» se envió a la papelera.</p>}
+      <div className="flex flex-wrap items-center gap-2">
+        <button className={ui.quiet} disabled={busy}
           onClick={() => void act("POST")} type="button">Restaurar</button>
-        <button className="text-sm text-red-700 underline disabled:opacity-50" disabled={busy}
+        <button className={ui.dangerLink} disabled={busy}
           onClick={() => setConfirming(true)} type="button">Eliminar definitivamente</button>
       </div>
       {error && <p className="mt-2 text-sm text-red-700" role="alert">{error}</p>}
