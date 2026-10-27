@@ -393,7 +393,8 @@ export default function CheckoutFlow({ products, layout, onClose }: {
         <button className={primary} disabled={busy || !pickupBranchId || (paymentMethod === "qr" && !qrAvailable) || missingHere.length > 0} type="submit">
           {busy ? "Registrando…" : paymentMethod === "qr" ? "Continuar con el pago" : "Registrar pedido"}
         </button>
-        <p className="m-0 text-xs leading-relaxed text-graphite">Al continuar se registra tu pedido. Desde ese momento el carrito ya no se puede modificar.</p>
+        <p className="m-0 text-xs leading-relaxed text-graphite">Al continuar se registra tu pedido. Desde ese momento el carrito ya no se puede modificar.
+          Usamos tu nombre y celular solo para atender este pedido (<Link className="underline underline-offset-2 hover:text-ink" href="/privacidad">privacidad</Link>).</p>
       </>)}
     </form>;
   } else if (view === "payment" && receipt) {
@@ -449,7 +450,7 @@ export default function CheckoutFlow({ products, layout, onClose }: {
       receipt.paymentStatus === "verified" ? "Pago verificado" : "Comprobante recibido";
     content = <div className="flex flex-col gap-5">
       {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-      <img alt="" className="w-12" src="/brand/xpander-x.png" />
+      <img alt="" className="w-12" src="/api/brand/isotipo" />
       <div className="flex flex-col gap-1.5">
         <span className="xp-label text-graphite">Pedido {receipt.number}</span>
         <h2 className={heading}>{title}</h2>

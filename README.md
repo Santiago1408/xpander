@@ -34,6 +34,12 @@ El [carrito y los pedidos por WhatsApp](docs/11-carrito-y-pedidos.md) explican c
 
 La [verificación del catálogo, la sucursal, el carrito y la papelera](docs/12-verificacion-catalogo-sucursal-papelera.md) cubre las migraciones y los flujos de administración recientes.
 
-La [guía de contacto, datos del negocio y borrado de imágenes publicadas](docs/13-contacto-negocio-y-redaccion.md) explica la configuración del mapa, redes y QR.
+La [guía de contacto, datos del negocio y borrado de imágenes publicadas](docs/13-contacto-negocio-y-redaccion.md) explica la configuración del mapa, redes, logos y QR. El [procesamiento de imágenes](docs/17-procesamiento-imagenes.md) describe los tamaños y formatos que se generan al subir fotos.
+
+La [entrega al propietario](docs/16-entrega.md) recoge la primera configuración de la tienda y cómo comprobar que se entrega vacía.
+
+El [despliegue en el VPS](docs/15-despliegue.md) explica cómo publicar la tienda en `xpandertienda.duckdns.org` junto al Caddy de Cabello, y cómo hacer y restaurar respaldos.
+
+Las [pruebas de integración](docs/14-pruebas-integracion.md) recorren pedidos, cancelaciones, ventas en tienda y la landing contra un PostgreSQL desechable, sin tocar los datos de desarrollo.
 
 Para empezar las pruebas con catálogo, pedidos, contenido e imágenes vacíos conservando la cuenta y las sucursales, sigue el [reinicio de datos de prueba](docs/10-reinicio-datos-prueba.md).

@@ -27,7 +27,7 @@ type Draft = {
 };
 
 type Publication = { version: number; publishedAt: string; username: string };
-type LibraryMedia = LandingMedia & { isDeleted: boolean; purpose?: "photo" | "qr" };
+type LibraryMedia = LandingMedia & { isDeleted: boolean; purpose?: "photo" | "qr" | "logo" };
 
 const sectionTypes = [
   { value: "hero", label: "Portada", hint: "Franja principal con título gigante, texto e imagen 4:5." },
@@ -420,7 +420,7 @@ export default function LandingEditor() {
                 <select aria-label="Elegir imagen del banco" className={`${ui.input} h-auto min-h-11`} onChange={(event) => changeTile(index, tileIndex, { mediaId: Number(event.target.value) })}
                   value={tile.mediaId && library.some((item) => item.id === tile.mediaId) ? tile.mediaId : 0}>
                   <option value={0}>{tile.mediaId ? "Quitar imagen" : "O elegir del banco…"}</option>
-                  {library.filter((item) => !item.isDeleted && item.purpose !== "qr" && (!usedElsewhere.has(item.id) || item.id === tile.mediaId)).map((item) =>
+                  {library.filter((item) => !item.isDeleted && item.purpose !== "qr" && item.purpose !== "logo" && (!usedElsewhere.has(item.id) || item.id === tile.mediaId)).map((item) =>
                     <option key={item.id} value={item.id}>{item.altText || `Imagen ${item.id}`}</option>)}
                 </select>
               </div>
@@ -541,7 +541,7 @@ export default function LandingEditor() {
                   onChange={(event) => setSelectedMedia((current) => ({ ...current, [section.key]: Number(event.target.value) }))}
                   value={selectedMedia[section.key] || 0}>
                   <option value={0}>Selecciona una imagen</option>
-                  {library.filter((item) => !item.isDeleted && item.purpose !== "qr" && !section.media.some((used) => used.id === item.id)).map((item) =>
+                  {library.filter((item) => !item.isDeleted && item.purpose !== "qr" && item.purpose !== "logo" && !section.media.some((used) => used.id === item.id)).map((item) =>
                     <option key={item.id} value={item.id}>{item.altText || `Imagen ${item.id}`}</option>)}
                 </select>
               </label>

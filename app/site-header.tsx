@@ -32,7 +32,7 @@ export default function SiteHeader({ nav, activeHref }: { nav: NavItem[]; active
         </nav>
         <Link aria-label="XPANDER, ir al inicio" className="shrink-0" href="/">
           {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-          <img alt="XPANDER" className="h-[18px] w-auto md:h-[22px]" src="/brand/xpander-wordmark.png" />
+          <img alt="XPANDER" className="h-[18px] w-auto md:h-[22px]" src="/api/brand/logotipo" />
         </Link>
         <div className="flex flex-1 items-center justify-end gap-0.5">
           <Link aria-label="Buscar en el catálogo" className="hidden size-11 items-center justify-center sm:inline-flex" href="/catalogo#buscar">

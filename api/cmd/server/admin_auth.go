@@ -123,7 +123,9 @@ type adminAuth struct {
 	store         authStore
 	publicOrigin  string
 	secureCookies bool
-	limiter       loginLimiter
+	// trustProxy is set in production, where every request arrives through Caddy.
+	trustProxy bool
+	limiter    loginLimiter
 }
 
 func registerAdminAuth(mux *http.ServeMux, store authStore, publicOrigin string, secureCookies bool) *adminAuth {
@@ -132,6 +134,25 @@ func registerAdminAuth(mux *http.ServeMux, store authStore, publicOrigin string,
 	mux.HandleFunc("GET /api/admin/me", controller.me)
 	mux.HandleFunc("POST /api/admin/logout", controller.logout)
 	return controller
+}
+
+// clientIP is the address login attempts are counted against. Behind Caddy every
+// request comes from the proxy, so with trustProxy the last X-Forwarded-For
+// entry is used: Caddy appends it and a visitor cannot forge it.
+func clientIP(r *http.Request, trustProxy bool) string {
+	if trustProxy {
+		if values := r.Header.Values("X-Forwarded-For"); len(values) > 0 {
+			parts := strings.Split(values[len(values)-1], ",")
+			if ip := net.ParseIP(strings.TrimSpace(parts[len(parts)-1])); ip != nil {
+				return ip.String()
+			}
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 func (controller *adminAuth) sameOrigin(r *http.Request) bool {
@@ -165,11 +186,7 @@ func (controller *adminAuth) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "credenciales incorrectas", http.StatusUnauthorized)
 		return
 	}
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		ip = r.RemoteAddr
-	}
-	ipKey := "ip:" + ip
+	ipKey := "ip:" + clientIP(r, controller.trustProxy)
 	userKey := "user:" + input.Username
 	if !controller.limiter.allow(ipKey, 100) || !controller.limiter.allow(userKey, 10) {
 		w.Header().Set("Retry-After", "900")

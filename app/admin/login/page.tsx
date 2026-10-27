@@ -12,12 +12,12 @@ export default function AdminLoginPage() {
       <section className="relative hidden flex-col justify-between overflow-hidden bg-ink p-12 text-white lg:flex">
         <Link aria-label="Ir a la tienda" className="flex items-center gap-3" href="/">
           {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-          <img alt="" className="w-8 invert" src="/brand/xpander-x.png" />
+          <img alt="" className="w-8 invert" src="/api/brand/isotipo" />
           {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-          <img alt="XPANDER" className="h-4 w-auto invert" src="/brand/xpander-wordmark.png" />
+          <img alt="XPANDER" className="h-4 w-auto invert" src="/api/brand/logotipo" />
         </Link>
         {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-        <img alt="" aria-hidden="true" className="pointer-events-none absolute -right-24 bottom-24 w-[70%] opacity-[0.06] invert" src="/brand/xpander-x.png" />
+        <img alt="" aria-hidden="true" className="pointer-events-none absolute -right-24 bottom-24 w-[70%] opacity-[0.06] invert" src="/api/brand/isotipo" />
         <div className="relative flex flex-col gap-6">
           <span className="font-mono text-xs uppercase tracking-[0.12em] text-[#bdbdbd]">Administración</span>
           <h1 className="xp-display m-0 text-[clamp(48px,5.4vw,88px)] leading-[0.92] tracking-[-0.02em]">Panel de<br />control</h1>
@@ -29,7 +29,7 @@ export default function AdminLoginPage() {
         <div className="w-full max-w-sm">
           <Link aria-label="Ir a la tienda" className="mb-12 inline-block lg:hidden" href="/">
             {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-            <img alt="XPANDER" className="h-5 w-auto" src="/brand/xpander-wordmark.png" />
+            <img alt="XPANDER" className="h-5 w-auto" src="/api/brand/logotipo" />
           </Link>
           <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-graphite">Acceso restringido</span>
           <h2 className="xp-display m-0 mt-2 text-3xl leading-none">Ingresar</h2>

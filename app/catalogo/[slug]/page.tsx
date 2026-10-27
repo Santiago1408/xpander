@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import ProductCard from "../../product-card";
-import { catalogNav, styleHref, titleCase } from "../../shop-format";
+import { catalogNav, formatBOB, hasPriceRange, lowestPrice, productHref, sizeLabel, styleHref, titleCase } from "../../shop-format";
 import SiteFooter, { footerContact } from "../../site-footer";
 import SiteHeader from "../../site-header";
 import { fetchBusiness, fetchCatalog, fetchLanding } from "../../store-data";
@@ -11,9 +11,24 @@ import ProductDetail from "./product-detail";
 
 export async function generateMetadata({ params }: PageProps<"/catalogo/[slug]">): Promise<Metadata> {
   const { slug } = await params;
-  const product = (await fetchCatalog())?.find((item) => item.slug === slug);
+  const products = await fetchCatalog();
+  const product = products?.find((item) => item.slug === slug);
+  // A slug that is not in the catalog answers 404 (also for search engines).
+  if (products && !product) notFound();
   if (!product) return { title: "Producto | XPANDER" };
-  return { title: `${titleCase(product.name)} | XPANDER`, description: product.description || `${titleCase(product.name)} en XPANDER.` };
+  const name = titleCase(product.name);
+  const price = `${hasPriceRange(product) ? "Desde " : ""}${formatBOB(lowestPrice(product))}`;
+  const sizes = product.variants.map(sizeLabel).filter(Boolean).join(", ");
+  const description = product.description.trim().slice(0, 200) ||
+    [`${name}${product.color ? ` color ${product.color.toLocaleLowerCase("es-BO")}` : ""}`, price, sizes && `Tallas ${sizes}`].filter(Boolean).join(" · ");
+  const photo = product.media[0];
+  return {
+    title: `${name} | XPANDER`, description,
+    alternates: { canonical: productHref(product) },
+    // The product photo first; the store image is a fallback for apps that skip WebP.
+    openGraph: { siteName: "XPANDER", locale: "es_BO", type: "website", url: productHref(product), title: `${name} · ${price}`, description,
+      images: [...(photo ? [{ url: `${photo.url}?size=card`, alt: photo.altText || name }] : []), { url: "/imagen-compartir", width: 1200, height: 630, alt: "XPANDER" }] },
+  };
 }
 
 async function Product({ params }: { params: PageProps<"/catalogo/[slug]">["params"] }) {

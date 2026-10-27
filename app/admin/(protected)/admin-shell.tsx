@@ -74,10 +74,10 @@ function initials(name: string) {
 function Brand() {
   return <Link aria-label="Resumen del panel" className="flex items-center gap-3 px-3 text-white" href="/admin">
     {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-    <img alt="" className="w-7 invert" src="/brand/xpander-x.png" />
+    <img alt="" className="w-7 invert" src="/api/brand/isotipo" />
     <span className="flex flex-col gap-1">
       {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-      <img alt="XPANDER" className="h-[13px] w-auto invert" src="/brand/xpander-wordmark.png" />
+      <img alt="XPANDER" className="h-[13px] w-auto invert" src="/api/brand/logotipo" />
       <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#bdbdbd]">Admin</span>
     </span>
   </Link>;

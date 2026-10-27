@@ -1,3 +1,4 @@
+import Link from "next/link";
 import FitTitle from "./fit-title";
 import type { LandingSection } from "./landing-sections";
 import MediaImage from "./media-image";
@@ -53,6 +54,10 @@ export default function SiteFooter({ contact, phone = "", socialLinks = {} }: {
               sizes="(max-width: 768px) 100vw, 25vw" src={image.url} width={800} />}
           </div>)}
         </div>}
+        <div className="mt-12 flex flex-wrap justify-between gap-3 border-t border-white/20 pt-6 font-mono text-xs text-[#bdbdbd]">
+          <span>XPANDER · Bolivia</span>
+          <Link className="hover:text-white" href="/privacidad">Privacidad</Link>
+        </div>
       </div>
     </footer>
   );

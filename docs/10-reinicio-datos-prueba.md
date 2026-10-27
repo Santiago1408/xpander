@@ -1,8 +1,10 @@
 # Reiniciar los datos de prueba
 
-Este procedimiento deja vacíos catálogo, marcas, estilos, públicos, inventario, movimientos, pedidos, comprobantes de pago, contenido de la landing y banco de imágenes. También borra las imágenes procesadas, sus versiones WebP y los comprobantes cargados, y reinicia los consecutivos de productos y variantes. **Conserva las cuentas administrativas y las sucursales**, necesarias para entrar y volver a registrar stock. Crea un borrador vacío de la página de inicio.
+Este procedimiento deja vacíos catálogo, marcas, estilos, públicos, inventario, movimientos, pedidos, comprobantes de pago, contenido de la landing y banco de imágenes. También borra las imágenes procesadas, sus versiones WebP y los comprobantes cargados, y reinicia los consecutivos de productos y variantes. **Conserva las cuentas administrativas y las sucursales**, necesarias para entrar y volver a registrar stock. Crea un borrador vacío de la página de inicio y deja vacío el teléfono de Datos del negocio.
 
-Desde la raíz del repositorio, primero aplica las migraciones hasta la `021` y detén la API para que nadie cargue imágenes o comprobantes mientras se limpia el volumen:
+**Solo para desarrollo:** la herramienta no se incluye en la imagen de producción, para que la tienda real nunca pueda vaciarse con un comando. Una instalación de producción arranca vacía por sí sola; la entrega al propietario se describe en la [guía de entrega](16-entrega.md).
+
+Desde la raíz del repositorio, primero aplica todas las migraciones y detén la API para que nadie cargue imágenes o comprobantes mientras se limpia el volumen:
 
 ```sh
 sudo docker compose -f compose.dev.yaml up --build -d

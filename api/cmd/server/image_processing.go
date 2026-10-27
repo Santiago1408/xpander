@@ -119,7 +119,7 @@ func processUploadedImage(ctx context.Context, directory string, data []byte, pu
 	if len(data) == 0 || len(data) > maxImageBytes || uploadedImageFormat(data) == "" {
 		return result, errors.New("usa una imagen JPEG, PNG o WebP de hasta 8 MiB")
 	}
-	if purpose != "photo" && purpose != "qr" {
+	if purpose != "photo" && purpose != "qr" && purpose != "logo" {
 		return result, errors.New("tipo de imagen no admitido")
 	}
 	select {
@@ -165,7 +165,8 @@ func processUploadedImage(ctx context.Context, directory string, data []byte, pu
 		}
 	}()
 	mainExtension, mainMime := ".webp", "image/webp"
-	if purpose == "qr" {
+	// QR codes and logos stay lossless PNG; logos keep their transparency.
+	if purpose == "qr" || purpose == "logo" {
 		mainExtension, mainMime = ".png", "image/png"
 	}
 	mainKey := base + mainExtension
@@ -174,6 +175,8 @@ func processUploadedImage(ctx context.Context, directory string, data []byte, pu
 	arguments := []string{inputPath + "[0]", "-auto-orient", "-strip"}
 	if purpose == "qr" {
 		arguments = append(arguments, "-define", "png:compression-level=9", "png:"+mainPath)
+	} else if purpose == "logo" {
+		arguments = append(arguments, "-resize", "1920x1920>", "-define", "png:compression-level=9", "png:"+mainPath)
 	} else {
 		arguments = append(arguments, "-resize", "1920x1920>", "-quality", "82",
 			"-define", "webp:method=4", "webp:"+mainPath)
@@ -185,7 +188,7 @@ func processUploadedImage(ctx context.Context, directory string, data []byte, pu
 	if err != nil {
 		return result, err
 	}
-	if purpose == "qr" {
+	if purpose == "qr" || purpose == "logo" {
 		return result, nil
 	}
 	for _, preset := range []struct {

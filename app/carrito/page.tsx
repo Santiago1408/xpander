@@ -26,7 +26,7 @@ export default function CartPage() {
         <Link className="text-sm font-medium hover:text-graphite" href="/catalogo">← <span className="hidden sm:inline">Seguir comprando</span></Link>
         <Link aria-label="XPANDER, ir al inicio" href="/">
           {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-          <img alt="XPANDER" className="h-[18px] w-auto md:h-6" src="/brand/xpander-wordmark.png" />
+          <img alt="XPANDER" className="h-[18px] w-auto md:h-6" src="/api/brand/logotipo" />
         </Link>
         <span className="justify-self-end font-mono text-xs text-graphite">Pago por QR</span>
       </div>

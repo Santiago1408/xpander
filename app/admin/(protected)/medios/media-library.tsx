@@ -6,7 +6,7 @@ import TrashActions, { type TrashRef } from "../papelera/trash-actions";
 import { ChipRow, EmptyState, FileField, Feedback, Pill, ui } from "../../admin-ui";
 
 type MediaItem = { id: number; url: string; altText: string; isDeleted: boolean;
-  useCount: number; purpose: "photo" | "qr"; bytes: number };
+  useCount: number; purpose: "photo" | "qr" | "logo"; bytes: number };
 
 function formatBytes(bytes: number): string {
   return bytes < 1_000_000 ? `${(bytes / 1_000).toFixed(0)} kB` : `${(bytes / 1_000_000).toFixed(2)} MB`;
@@ -101,7 +101,7 @@ export default function MediaLibrary() {
       {trashed && <TrashActions item={trashed} notice onChanged={() => window.location.reload()} />}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ChipRow label="Filtrar imágenes">
-          {[["all", "Activas"], ["photo", "Fotografías"], ["qr", "Códigos QR"], ["trash", "En papelera"]].map(([value, label]) =>
+          {[["all", "Activas"], ["photo", "Fotografías"], ["qr", "Códigos QR"], ["logo", "Logos"], ["trash", "En papelera"]].map(([value, label]) =>
             <button aria-pressed={view === value} className={`${ui.chip(view === value)} shrink-0`} key={value} onClick={() => setView(value)} type="button">{label}
               <span className="font-mono text-[11px] opacity-70">{(items || []).filter((item) => value === "trash" ? item.isDeleted : !item.isDeleted && (value === "all" || item.purpose === value)).length}</span></button>)}
         </ChipRow>
@@ -110,10 +110,10 @@ export default function MediaLibrary() {
       {!items ? <p className="text-sm text-graphite">Cargando imágenes…</p> : visible.length === 0 ? <EmptyState>{items.length === 0 ? "Todavía no hay imágenes." : "No hay imágenes en esta vista."}</EmptyState> : (
         <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {visible.map((item) => <article className={`flex flex-col bg-white ${item.isDeleted ? "opacity-70" : ""}`} key={item.id}>
-            <div className={`relative aspect-[4/5] overflow-hidden ${item.purpose === "qr" ? "bg-white" : "bg-mist"}`}>
-              <MediaImage alt={item.altText} className={`absolute inset-0 h-full w-full ${item.purpose === "qr" ? "object-contain p-4" : "object-cover"}`}
+            <div className={`relative aspect-[4/5] overflow-hidden ${item.purpose === "qr" || item.purpose === "logo" ? "bg-white" : "bg-mist"}`}>
+              <MediaImage alt={item.altText} className={`absolute inset-0 h-full w-full ${item.purpose === "qr" || item.purpose === "logo" ? "object-contain p-4" : "object-cover"}`}
                 height={500} sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 20vw" src={item.url} width={400} />
-              <span className="absolute left-2 top-2 bg-white px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em]">{item.purpose === "qr" ? "QR" : "Foto"}</span>
+              <span className="absolute left-2 top-2 bg-white px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em]">{item.purpose === "qr" ? "QR" : item.purpose === "logo" ? "Logo" : "Foto"}</span>
             </div>
             <div className="flex flex-1 flex-col gap-1.5 p-3">
               <p className="m-0 truncate text-sm font-medium" title={item.altText}>{item.altText || `Imagen ${item.id}`}</p>

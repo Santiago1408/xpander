@@ -32,7 +32,7 @@ export default function Generator() {
   useEffect(() => {
     void (async () => {
       try {
-        const [wordmark, mark] = await Promise.all([loadImage("/brand/xpander-wordmark.png"), loadImage("/brand/xpander-x.png")]);
+        const [wordmark, mark] = await Promise.all([loadImage("/api/brand/logotipo"), loadImage("/api/brand/isotipo")]);
         const styles = getComputedStyle(document.documentElement);
         const sans = styles.getPropertyValue("--font-archivo").trim() || "system-ui, sans-serif";
         const mono = styles.getPropertyValue("--font-plex-mono").trim() || "monospace";
@@ -72,22 +72,23 @@ export default function Generator() {
     priceMax.trim() && (priceMaxMinor === null || (priceMinor !== null && priceMaxMinor <= priceMinor)) ? "El precio máximo debe ser mayor que el mínimo." :
     !priceMax.trim() && compare.trim() && (compareMinor === null || (priceMinor !== null && compareMinor <= priceMinor)) ? "El precio anterior debe ser mayor que el precio actual." : "";
 
-  const data: PostData | null = useMemo(() => {
-    if (!name.trim() || sizes.length === 0 || priceMinor === null || priceError) return null;
-    return { name: name.trim(), meta: meta.trim() || "XPANDER", code: code.trim(), sizes, priceMinor,
-      priceMaxMinor: priceMaxMinor && priceMaxMinor > priceMinor ? priceMaxMinor : null,
-      compareMinor: !priceMaxMinor && compareMinor && compareMinor > priceMinor ? compareMinor : null };
+  // Nothing is required: an image with only the photo and the XPANDER logos is valid.
+  const data: PostData = useMemo(() => {
+    const base = priceError ? null : priceMinor;
+    return { name: name.trim(), meta: meta.trim(), code: code.trim(), sizes, priceMinor: base,
+      priceMaxMinor: base !== null && priceMaxMinor && priceMaxMinor > base ? priceMaxMinor : null,
+      compareMinor: base !== null && !priceMaxMinor && compareMinor && compareMinor > base ? compareMinor : null };
   }, [name, meta, code, sizes, priceMinor, priceMaxMinor, compareMinor, priceError]);
 
   useEffect(() => {
-    if (canvas.current && assets && data) drawPost(canvas.current, template, data, photo, assets);
+    if (canvas.current && assets) drawPost(canvas.current, template, data, photo, assets);
   }, [assets, data, photo, template]);
 
   function download() {
-    if (!canvas.current || !data) return;
+    if (!canvas.current) return;
     canvas.current.toBlob((blob) => {
       if (!blob) { notify.error("No se pudo generar el PNG."); return; }
-      const slug = data.name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "producto";
+      const slug = data.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "imagen";
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -100,7 +101,6 @@ export default function Generator() {
 
   const spec = templates.find((item) => item.key === template)!;
   const step = "flex size-6 shrink-0 items-center justify-center rounded-full bg-ink font-mono text-xs text-white";
-  const missing = [!name.trim() && "el nombre", sizes.length === 0 && "al menos una talla", priceMinor === null && "el precio"].filter(Boolean);
 
   return <div className="grid items-start grid-cols-1 gap-4 xl:grid-cols-[400px_minmax(0,1fr)]">
     <div className="flex min-w-0 flex-col gap-4">
@@ -113,7 +113,8 @@ export default function Generator() {
 
       <section className={`${ui.card} ${ui.cardPad} flex flex-col gap-4`}>
         <h2 className={`${ui.cardTitle} flex items-center gap-2.5`}><span className={step}>2</span>Información</h2>
-        <label className={ui.label}>Nombre del producto *
+        <p className="m-0 text-xs leading-relaxed text-graphite">Todo es opcional: lo que dejes vacío no aparece en la imagen.</p>
+        <label className={ui.label}>Nombre del producto
           <input className={ui.input} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder="Short deportivo rojo" value={name} />
         </label>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_120px]">
@@ -125,7 +126,7 @@ export default function Generator() {
           </label>
         </div>
         <div className="flex flex-col gap-2">
-          <span className="text-[13px] font-medium">Tallas disponibles *</span>
+          <span className="text-[13px] font-medium">Tallas disponibles</span>
           <div className="flex flex-wrap gap-1.5">
             {[...sizePresets, ...sizes.filter((size) => !sizePresets.includes(size))].map((size) => {
               const selected = sizes.includes(size);
@@ -141,7 +142,7 @@ export default function Generator() {
           {sizes.length > 0 && <span className="text-xs text-graphite">En la imagen: {sizes.join(" · ")}</span>}
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <label className={ui.label}>Precio (Bs) *
+          <label className={ui.label}>Precio (Bs)
             <input className={`${ui.input} font-mono`} inputMode="decimal" onChange={(event) => setPrice(event.target.value)} placeholder="150" value={price} />
           </label>
           <label className={ui.label}>Hasta (Bs)
@@ -161,7 +162,7 @@ export default function Generator() {
         <div className="grid gap-2">
           {templates.map((item) => <button aria-pressed={template === item.key} className={`flex flex-col gap-0.5 border p-3 text-left ${template === item.key ? "border-ink bg-ink text-white" : "border-line bg-white hover:border-ink"}`}
             key={item.key} onClick={() => setTemplate(item.key)} type="button">
-            <span className="text-sm font-semibold">{item.name}{item.key === "oferta" && data && discountOf(data) > 0 ? " · recomendada" : ""}</span>
+            <span className="text-sm font-semibold">{item.name}{item.key === "oferta" && discountOf(data) > 0 ? " · recomendada" : ""}</span>
             <span className={`text-xs ${template === item.key ? "text-[#bdbdbd]" : "text-graphite"}`}>{item.hint} {item.width}×{item.height}</span>
           </button>)}
         </div>
@@ -171,15 +172,15 @@ export default function Generator() {
     <section className={`${ui.card} ${ui.cardPad} flex min-w-0 flex-col gap-4 xl:sticky xl:top-6`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-0.5"><h2 className={ui.cardTitle}>Vista previa</h2>
-          <span className="font-mono text-xs text-graphite">{spec.name} · {spec.width}×{spec.height} px{data ? ` · ${priceText(data)}` : ""}</span></div>
-        <button className={ui.primary} disabled={!data || !assets} onClick={download} type="button">Descargar PNG</button>
+          <span className="font-mono text-xs text-graphite">{spec.name} · {spec.width}×{spec.height} px{priceText(data) ? ` · ${priceText(data)}` : ""}</span></div>
+        <button className={ui.primary} disabled={!assets} onClick={download} type="button">Descargar PNG</button>
       </div>
       <div className="flex justify-center bg-soft p-3 sm:p-6">
-        {data && assets ? <canvas aria-label="Vista previa de la imagen" className="h-auto max-h-[72vh] w-auto max-w-full shadow-lg" ref={canvas} role="img"
+        {assets ? <canvas aria-label="Vista previa de la imagen" className="h-auto max-h-[72vh] w-auto max-w-full shadow-lg" ref={canvas} role="img"
           style={{ aspectRatio: `${spec.width} / ${spec.height}` }} /> :
-          <p className="m-0 py-24 text-center text-sm text-graphite">{assets ? `Para ver la vista previa falta ${missing.join(", ") || "corregir el precio"}.` : "Preparando el generador…"}</p>}
+          <p className="m-0 py-24 text-center text-sm text-graphite">Preparando el generador…</p>}
       </div>
-      {data && !photo && <p className="m-0 text-xs text-graphite">Aún no elegiste una foto: la vista previa muestra un espacio reservado.</p>}
+      {!photo && <p className="m-0 text-xs text-graphite">Aún no elegiste una foto: la vista previa muestra un espacio reservado.</p>}
     </section>
   </div>;
 }

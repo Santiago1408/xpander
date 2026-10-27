@@ -60,30 +60,24 @@ func run() error {
 	if secureCookies && parsedOrigin.Scheme != "https" {
 		return errors.New("PUBLIC_ORIGIN must use HTTPS in production")
 	}
-	mux := newHandler(pool)
-	admin := registerAdminAuth(mux, databaseAuthStore{pool: pool}, publicOrigin, secureCookies)
 	mediaDir := os.Getenv("MEDIA_DIR")
 	if mediaDir == "" {
 		return errors.New("MEDIA_DIR is required")
 	}
-	registerLandingRoutes(mux, pool, admin, mediaDir)
-	registerBusinessRoutes(mux, pool, admin)
-	registerBrandRoutes(mux, pool, admin)
-	registerTermRoutes(mux, pool, admin)
-	registerBranchRoutes(mux, pool, admin)
-	registerAccountRoutes(mux, pool, admin)
-	registerProductRoutes(mux, pool, admin)
-	registerQuickCatalogRoutes(mux, pool, admin)
-	registerTrashRoutes(mux, pool, admin, mediaDir)
-	registerInventoryRoutes(mux, pool, admin)
+	// The number that receives orders is the business's own: there is no default.
 	whatsAppNumber := os.Getenv("ORDER_WHATSAPP_NUMBER")
-	if whatsAppNumber == "" {
-		whatsAppNumber = "59170782380"
-	}
 	if !validWhatsAppNumber(whatsAppNumber) {
-		return errors.New("ORDER_WHATSAPP_NUMBER must contain 8 to 15 digits with country code")
+		return errors.New("ORDER_WHATSAPP_NUMBER is required: 8 to 15 digits with country code")
 	}
-	registerOrderRoutes(mux, pool, admin, whatsAppNumber, mediaDir)
+	trustProxy := false
+	switch os.Getenv("TRUST_PROXY_HEADERS") {
+	case "", "false":
+	case "true":
+		trustProxy = true
+	default:
+		return errors.New("TRUST_PROXY_HEADERS must be true or false")
+	}
+	mux := buildAPI(pool, publicOrigin, secureCookies, mediaDir, whatsAppNumber, trustProxy)
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           mux,
@@ -110,6 +104,25 @@ func run() error {
 		defer cancel()
 		return server.Shutdown(shutdownCtx)
 	}
+}
+
+// buildAPI registers every route; the integration tests mount the same handler.
+func buildAPI(pool *pgxpool.Pool, publicOrigin string, secureCookies bool, mediaDir, whatsAppNumber string, trustProxy bool) *http.ServeMux {
+	mux := newHandler(pool)
+	admin := registerAdminAuth(mux, databaseAuthStore{pool: pool}, publicOrigin, secureCookies)
+	admin.trustProxy = trustProxy
+	registerLandingRoutes(mux, pool, admin, mediaDir)
+	registerBusinessRoutes(mux, pool, admin, mediaDir)
+	registerBrandRoutes(mux, pool, admin)
+	registerTermRoutes(mux, pool, admin)
+	registerBranchRoutes(mux, pool, admin)
+	registerAccountRoutes(mux, pool, admin)
+	registerProductRoutes(mux, pool, admin)
+	registerQuickCatalogRoutes(mux, pool, admin)
+	registerTrashRoutes(mux, pool, admin, mediaDir)
+	registerInventoryRoutes(mux, pool, admin)
+	registerOrderRoutes(mux, pool, admin, whatsAppNumber, mediaDir)
+	return mux
 }
 
 type databasePinger interface {

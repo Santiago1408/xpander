@@ -84,7 +84,7 @@ func (service *landingService) uploadMedia(w http.ResponseWriter, r *http.Reques
 	if purpose == "" {
 		purpose = "photo"
 	}
-	if purpose != "photo" && purpose != "qr" {
+	if purpose != "photo" && purpose != "qr" && purpose != "logo" {
 		http.Error(w, "tipo de imagen no admitido", http.StatusBadRequest)
 		return
 	}
@@ -179,6 +179,8 @@ func (service *landingService) listMedia(w http.ResponseWriter, r *http.Request)
 		+ (SELECT count(*) FROM page_section_media sm WHERE sm.media_id=m.id)
 		+ (SELECT count(*) FROM page_publication_media pubm WHERE pubm.media_id=m.id)
 		+ (SELECT count(*) FROM business_profile bp WHERE bp.qr_media_id=m.id)
+		+ (SELECT count(*) FROM business_profile bp WHERE bp.logo_wordmark_media_id=m.id)
+		+ (SELECT count(*) FROM business_profile bp WHERE bp.logo_mark_media_id=m.id)
 		FROM media m WHERE m.kind='image' AND m.source_type='local'
 		ORDER BY m.id DESC`)
 	if err != nil {
@@ -226,6 +228,19 @@ func (service *landingService) changeMediaTrash(w http.ResponseWriter, r *http.R
 	if restore {
 		query = `UPDATE media SET deleted_at=NULL WHERE id=$1 AND kind='image'
 			AND source_type='local' AND deleted_at IS NOT NULL RETURNING id`
+	}
+	if !restore {
+		// A logo in use would silently fall back to the default one; ask to switch it first.
+		var inUse bool
+		if err := service.pool.QueryRow(r.Context(), `SELECT EXISTS (SELECT 1 FROM business_profile
+			WHERE logo_wordmark_media_id=$1 OR logo_mark_media_id=$1)`, id).Scan(&inUse); err != nil {
+			serverError(w, "check logo in use", err)
+			return
+		}
+		if inUse {
+			http.Error(w, "este logo está en uso; vuelve al logo por defecto en Datos del negocio antes de eliminarlo", http.StatusConflict)
+			return
+		}
 	}
 	var found int64
 	if err := service.pool.QueryRow(r.Context(), query, id).Scan(&found); err != nil {

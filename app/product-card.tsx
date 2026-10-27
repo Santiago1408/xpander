@@ -7,7 +7,7 @@ import { discountPercent, formatBOB, hasPriceRange, productHref, productInStock,
 export function BrandPlaceholder({ className = "" }: { className?: string }) {
   return <div aria-hidden="true" className={`absolute inset-0 flex items-center justify-center ${className}`}>
     {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-    <img alt="" className="w-[46%] opacity-[0.07]" src="/brand/xpander-x.png" />
+    <img alt="" className="w-[46%] opacity-[0.07]" src="/api/brand/isotipo" />
   </div>;
 }
 

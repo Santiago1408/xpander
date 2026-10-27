@@ -104,3 +104,19 @@ func TestAdminLoginRejectsOtherOrigin(t *testing.T) {
 		t.Fatalf("cross-origin login status = %d", response.Code)
 	}
 }
+
+func TestClientIPBehindProxy(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/login", nil)
+	request.RemoteAddr = "172.18.0.5:41000"
+	request.Header.Add("X-Forwarded-For", "6.6.6.6, 190.129.10.20")
+	if got := clientIP(request, false); got != "172.18.0.5" {
+		t.Fatalf("without trusted proxy: %s", got)
+	}
+	if got := clientIP(request, true); got != "190.129.10.20" {
+		t.Fatalf("behind proxy: %s (the visitor-supplied entry must be ignored)", got)
+	}
+	request.Header.Set("X-Forwarded-For", "not-an-ip")
+	if got := clientIP(request, true); got != "172.18.0.5" {
+		t.Fatalf("invalid header: %s", got)
+	}
+}

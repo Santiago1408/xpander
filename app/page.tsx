@@ -24,7 +24,7 @@ function Notice({ title, text }: { title: string; text: string }) {
     <div className="flex flex-1 flex-col bg-band text-band-fg">
       <div className="xp-container flex flex-1 flex-col justify-center gap-6 py-28">
         {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-        <img alt="XPANDER" className="xp-logo-band h-6 w-auto self-start" src="/brand/xpander-wordmark.png" />
+        <img alt="XPANDER" className="xp-logo-band h-6 w-auto self-start" src="/api/brand/logotipo" />
         <h1 className="xp-display m-0 max-w-5xl text-[clamp(44px,7vw,112px)] leading-[0.92] tracking-[-0.02em]">{title}</h1>
         <p className="m-0 max-w-md text-lg text-band-body">{text}</p>
       </div>

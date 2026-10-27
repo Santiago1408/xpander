@@ -7,3 +7,9 @@ La sección **Contacto** del editor de landing guarda redes sociales y un solo e
 La antigua prohibición de borrar imágenes en publicaciones históricas evitaba referencias rotas. Ahora, al confirmar **Eliminar definitivamente**, la API sustituye esa imagen por `Imagen eliminada` en cada instantánea que la usa, elimina las referencias y borra el archivo. Conserva número de versión, fecha, publicador, textos y otras imágenes. Es una excepción deliberada a la inmutabilidad de las publicaciones; también afecta la versión pública actual. Las imágenes se sirven sin caché persistente para que no sigan visibles tras borrarse. Si la imagen era el QR activo, se quita también de la configuración del negocio.
 
 Opciones de política consideradas: conservar el archivo y bloquear el borrado, eliminar las versiones históricas afectadas, o conservar las versiones y sustituir solo la imagen. Se aplica la tercera opción elegida para mantener el historial sin retener el archivo.
+
+## Logos de la tienda
+
+En `/admin/negocio`, la tarjeta «Logos de la tienda» permite reemplazar el **logotipo** (el nombre) y el **isotipo** (el símbolo). Se suben como PNG o WebP con fondo transparente; la API los guarda en PNG sin pérdida (lado máximo de 1920 píxeles) con propósito `logo`, separados de las fotos. La vista previa los muestra sobre fondo claro y oscuro, porque en las franjas oscuras se invierten a blanco. El cambio se aplica al pulsar «Guardar cambios».
+
+Todas las páginas cargan los logos desde `GET /api/brand/logotipo` y `GET /api/brand/isotipo`: si hay un logo elegido se entrega ese archivo y, si no, se redirige a los originales de `public/brand/`. El isotipo también es el ícono de la pestaña del navegador (`/favicon.ico` redirige a él). Un logo en uso no puede enviarse a la papelera; primero hay que volver al logo por defecto. Migración: `024_brand_logos.sql`.

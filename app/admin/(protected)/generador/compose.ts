@@ -4,12 +4,13 @@
 export type TemplateKey = "ficha" | "franja" | "precio" | "oferta" | "historia";
 
 // Typed in by the owner; the generator does not read the catalog or inventory.
+// Every field is optional: whatever is empty is simply not drawn.
 export type PostData = {
   name: string;
   meta: string;
   code: string;
   sizes: string[];
-  priceMinor: number;
+  priceMinor: number | null;
   priceMaxMinor: number | null;
   compareMinor: number | null;
 };
@@ -29,18 +30,25 @@ const GRAPHITE = "#5E5E5E";
 const MIST = "#EDEDED";
 const MUTED = "#BDBDBD";
 
-export function formatPrice(minor: number): string {
+function formatAmount(minor: number): string {
   const whole = Math.floor(minor / 100).toLocaleString("es-BO");
   const cents = minor % 100;
-  return cents ? `Bs. ${whole},${String(cents).padStart(2, "0")}` : `Bs. ${whole}`;
+  return cents ? `${whole},${String(cents).padStart(2, "0")}` : whole;
+}
+
+export function formatPrice(minor: number): string {
+  return `Bs. ${formatAmount(minor)}`;
 }
 
 export function discountOf(data: PostData): number {
-  return !data.priceMaxMinor && data.compareMinor && data.compareMinor > data.priceMinor ? Math.round((1 - data.priceMinor / data.compareMinor) * 100) : 0;
+  return data.priceMinor !== null && !data.priceMaxMinor && data.compareMinor && data.compareMinor > data.priceMinor ?
+    Math.round((1 - data.priceMinor / data.compareMinor) * 100) : 0;
 }
 
+// A range shows the currency once: "Bs. 480 – 510".
 export function priceText(data: PostData): string {
-  return data.priceMaxMinor && data.priceMaxMinor > data.priceMinor ? `${formatPrice(data.priceMinor)} – ${formatPrice(data.priceMaxMinor)}` : formatPrice(data.priceMinor);
+  if (data.priceMinor === null) return "";
+  return data.priceMaxMinor && data.priceMaxMinor > data.priceMinor ? `${formatPrice(data.priceMinor)} – ${formatAmount(data.priceMaxMinor)}` : formatPrice(data.priceMinor);
 }
 
 export function loadImage(src: string): Promise<HTMLImageElement> {
@@ -124,6 +132,7 @@ function wrap(ctx: Ctx, text: string, maxWidth: number): string[] {
 function heading(ctx: Ctx, assets: Assets, text: string, maxWidth: number, size: number, maxLines: number) {
   let current = size;
   let lines: string[] = [];
+  if (!text.trim()) return { lines, size };
   while (current > 28) {
     font(ctx, assets, current, { expanded: true });
     lines = wrap(ctx, text.toLocaleUpperCase("es-BO"), maxWidth);
@@ -156,6 +165,7 @@ function logo(ctx: Ctx, image: CanvasImageSource & { width: number; height: numb
 
 // Size chips in one row; they shrink when there are many sizes.
 function chips(ctx: Ctx, assets: Assets, sizes: string[], x: number, y: number, maxWidth: number, options: { size: number; fill?: string; stroke?: string; color: string; align?: "left" | "right" | "center" }) {
+  if (sizes.length === 0) return { size: 0, width: 0 };
   let size = options.size;
   const gap = 12;
   let widths: number[] = [];
@@ -180,6 +190,7 @@ function chips(ctx: Ctx, assets: Assets, sizes: string[], x: number, y: number, 
 }
 
 function label(ctx: Ctx, assets: Assets, text: string, x: number, y: number, color: string, size = 22, align: CanvasTextAlign = "left") {
+  if (!text) return;
   font(ctx, assets, size, { mono: true });
   spaced(ctx, size * 0.12);
   ctx.fillStyle = color; ctx.textAlign = align;
@@ -189,6 +200,7 @@ function label(ctx: Ctx, assets: Assets, text: string, x: number, y: number, col
 
 function price(ctx: Ctx, assets: Assets, data: PostData, x: number, baseline: number, size: number, color: string, strikeColor: string, align: CanvasTextAlign = "right", strikePrefix = "", maxWidth = 560) {
   const text = priceText(data);
+  if (!text) return;
   // A price range is longer than a single price: shrink it to the available width.
   for (; size > 28; size -= 2) {
     font(ctx, assets, size, { mono: true });
@@ -213,7 +225,12 @@ function price(ctx: Ctx, assets: Assets, data: PostData, x: number, baseline: nu
 }
 
 function sizesTitle(data: PostData) {
-  return data.sizes.length === 1 ? "Talla" : "Tallas";
+  return data.sizes.length === 0 ? "" : data.sizes.length === 1 ? "Talla" : "Tallas";
+}
+
+// Top of a heading drawn bottom-up from its last baseline; without text it takes no space.
+function headingTop(title: { lines: string[]; size: number }, lastBaseline: number, lineHeight: number) {
+  return title.lines.length ? lastBaseline - lineHeight * (title.lines.length - 1) - title.size * 0.75 : lastBaseline;
 }
 
 export function drawPost(canvas: HTMLCanvasElement, template: TemplateKey, data: PostData, photo: HTMLCanvasElement | null, assets: Assets) {
@@ -255,7 +272,8 @@ export function drawPost(canvas: HTMLCanvasElement, template: TemplateKey, data:
       label(ctx, assets, "Recojo o envío · Pago QR", W - pad, footerTop + 20, GRAPHITE, 22, "right");
     }
     const rowBottom = footerTop - (story ? 48 : 32);
-    const chipSize = story ? 84 : 72;
+    const hasRow = data.sizes.length > 0 || data.priceMinor !== null;
+    const chipSize = hasRow ? (story ? 84 : 72) : 0;
     if (story) {
       chips(ctx, assets, data.sizes, W / 2 - 40, rowBottom - chipSize, 360, { size: chipSize, stroke: INK, color: INK, align: "right" });
       price(ctx, assets, data, W / 2, rowBottom - 8, 86, INK, GRAPHITE, "left", "", W / 2 - pad);
@@ -264,11 +282,11 @@ export function drawPost(canvas: HTMLCanvasElement, template: TemplateKey, data:
       label(ctx, assets, sizesTitle(data), pad, rowBottom - chipSize - 16, GRAPHITE, 20);
       price(ctx, assets, data, W - pad, rowBottom - 4, 80, INK, GRAPHITE);
     }
-    const nameBottom = rowBottom - chipSize - (story ? 84 : 56);
+    const nameBottom = rowBottom - chipSize - (hasRow ? (story ? 84 : 56) : 0);
     const title = heading(ctx, assets, data.name, W - pad * 2, story ? 70 : 54, 2);
     ctx.fillStyle = INK;
     drawLines(ctx, title.lines, story ? W / 2 : pad, nameBottom, title.size * 0.95, story ? "center" : "left");
-    const nameTop = nameBottom - title.size * 0.95 * (title.lines.length - 1) - title.size * 0.75;
+    const nameTop = headingTop(title, nameBottom, title.size * 0.95);
     if (!story) { ctx.fillStyle = INK; ctx.fillRect(pad, nameTop - 34, W - pad * 2, 3); }
     const photoBottom = nameTop - (story ? 48 : 66);
     drawPhoto(story ? pad : pad + 88, photoTop, W - (story ? pad : pad + 88) * 2, photoBottom - photoTop);
@@ -287,6 +305,8 @@ export function drawPost(canvas: HTMLCanvasElement, template: TemplateKey, data:
       ctx.fillStyle = "#FFFFFF"; ctx.fillText(text, W - P - width + 20, 196);
     }
     ctx.fillStyle = INK; ctx.fillRect(0, H - band, W, band);
+    // With only a photo, the band carries the logo instead of staying empty.
+    if (!data.name && !data.meta && !data.code && data.sizes.length === 0 && data.priceMinor === null) logo(ctx, assets.wordmarkWhite, W / 2, H - band / 2 - 30, 60, "center");
     label(ctx, assets, data.meta, P, H - band + 78, MUTED, 22);
     if (data.code) label(ctx, assets, `Cód. ${data.code}`, W - P, H - band + 78, MUTED, 22, "right");
     const title = heading(ctx, assets, data.name, W - P * 2, 58, 2);
@@ -302,7 +322,7 @@ export function drawPost(canvas: HTMLCanvasElement, template: TemplateKey, data:
 
   if (template === "precio") {
     ctx.fillStyle = MIST; ctx.fillRect(0, 0, W, H);
-    const digits = String(Math.floor(data.priceMinor / 100));
+    const digits = data.priceMinor === null ? "" : String(Math.floor(data.priceMinor / 100));
     let size = 400;
     font(ctx, assets, size, { weight: 700, expanded: true });
     while (ctx.measureText(digits).width > W - 80 && size > 160) { size -= 10; font(ctx, assets, size, { weight: 700, expanded: true }); }
@@ -339,17 +359,18 @@ export function drawPost(canvas: HTMLCanvasElement, template: TemplateKey, data:
     logo(ctx, assets.wordmarkWhite, P, footerTop, 26);
     label(ctx, assets, "Hasta agotar stock", W - P, footerTop + 22, MUTED, 20, "right");
     const rowBottom = footerTop - 24 - 32;
-    const chipSize = 64;
+    const hasRow = data.sizes.length > 0 || data.priceMinor !== null;
+    const chipSize = hasRow ? 64 : 0;
     label(ctx, assets, sizesTitle(data), P, rowBottom - chipSize / 2 + 7, MUTED, 20);
     font(ctx, assets, 20, { mono: true });
     const offset = ctx.measureText(sizesTitle(data).toLocaleUpperCase("es-BO")).width + 32;
     chips(ctx, assets, data.sizes, P + offset, rowBottom - chipSize, 500 - offset, { size: chipSize, stroke: "#FFFFFF", color: "#FFFFFF" });
     price(ctx, assets, data, W - P, rowBottom - 4, 74, "#FFFFFF", MUTED, "right", "Antes ", 440);
     const title = heading(ctx, assets, data.name, 520, 44, 2);
-    const nameBottom = rowBottom - chipSize - 34;
+    const nameBottom = rowBottom - chipSize - (hasRow ? 34 : 0);
     ctx.fillStyle = "#FFFFFF";
     drawLines(ctx, title.lines, P, nameBottom, title.size * 0.95);
-    const nameTop = nameBottom - title.size * 0.95 * (title.lines.length - 1) - title.size * 0.75;
+    const nameTop = headingTop(title, nameBottom, title.size * 0.95);
     const boxTop = 244, boxBottom = nameTop - 40;
     ctx.fillStyle = "#FFFFFF"; ctx.fillRect(P, boxTop, W - P * 2, boxBottom - boxTop);
     drawPhoto(P + 32, boxTop + 32, W - P * 2 - 64, boxBottom - boxTop - 64);

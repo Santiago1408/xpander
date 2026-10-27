@@ -31,4 +31,4 @@ El editor actual permite título y metadatos SEO, textos, orden, visibilidad, el
 
 ## Generador de imágenes para redes
 
-En `/admin/generador` el dueño sube una foto con fondo blanco, escribe el nombre, las tallas disponibles y el precio (uno solo, un rango «desde – hasta» o un precio anterior para ofertas) y elige una de cinco plantillas. El generador no lee el catálogo ni el inventario: solo usa lo que se escribe. La imagen se compone en el navegador con el logo y se descarga como PNG; la foto no se guarda en el servidor.
+En `/admin/generador` el dueño sube una foto con fondo blanco, y, si quiere, escribe el nombre, las tallas disponibles y el precio (uno solo, un rango que muestra la moneda una vez, como «Bs. 480 – 510», o un precio anterior para ofertas) y elige una de cinco plantillas. Ningún campo es obligatorio: lo que queda vacío no se dibuja, y una imagen solo con la foto y los logos es válida. La vista previa aparece desde el inicio. El generador no lee el catálogo ni el inventario: solo usa lo que se escribe. La imagen se compone en el navegador con el logo y se descarga como PNG; la foto no se guarda en el servidor.

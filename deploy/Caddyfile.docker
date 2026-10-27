@@ -1,0 +1,27 @@
+# Block for a Caddy that runs as a Docker container. Append it to that Caddy's
+# Caddyfile; xpander-api and xpander-web are the names given by
+# compose.prod.caddy-docker.yaml on the shared network.
+xpandertienda.duckdns.org {
+	encode zstd gzip
+	# Photos and payment receipts are limited to 8 MiB by the API.
+	request_body {
+		max_size 12MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# Only the store's own scripts, styles, fonts and images; only YouTube, Vimeo
+		# and Google Maps may be embedded. Next needs its inline scripts.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://www.google.com https://google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+		-Server
+	}
+	handle /api/* {
+		reverse_proxy xpander-api:8080
+	}
+	handle {
+		reverse_proxy xpander-web:3000
+	}
+}

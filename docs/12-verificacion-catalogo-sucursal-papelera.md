@@ -9,7 +9,7 @@ sudo docker compose -f compose.dev.yaml up -d --no-deps --force-recreate api
 sudo docker compose -f compose.dev.yaml exec -T database psql -U xpander -d xpander -c 'SELECT version,name FROM schema_migrations WHERE version >= 14 ORDER BY version;'
 ```
 
-La consulta debe mostrar las migraciones 014 a 022. Inicia Next con `npm run dev` si aún no está abierto.
+La consulta debe mostrar las migraciones a partir de la 014, hasta la más reciente. Inicia Next con `npm run dev` si aún no está abierto.
 
 ## 1. Estilos y público
 

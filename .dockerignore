@@ -1,0 +1,14 @@
+.git
+.next
+.tools
+node_modules
+api
+backups
+deploy
+design
+docs
+logos
+.env*
+compose*.yaml
+Dockerfile
+*.tsbuildinfo

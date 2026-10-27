@@ -46,6 +46,22 @@ services:
     networks:
       - private
 
+  reset-password:
+    profiles: ["setup"]
+    build:
+      context: ./api
+      dockerfile: Dockerfile.dev
+    command: ["go", "run", "./cmd/reset_password"]
+    environment:
+      DATABASE_URL: postgres://xpander:xpander_dev_only@database:5432/xpander?sslmode=disable
+    stdin_open: true
+    tty: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - private
+
   api:
     build:
       context: ./api

@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import Script from "next/script";
 import "./globals.css";
 import Toaster from "./toast";
+import { siteUrl } from "./site-url";
 
 // Fonts are bundled (latin subset, SIL OFL; licenses in app/fonts) so the site
 // never depends on reaching Google Fonts when it builds or runs.
@@ -23,8 +24,16 @@ const plexMono = localFont({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "XPANDER",
   description: "Tienda de ropa XPANDER",
+  openGraph: {
+    siteName: "XPANDER", locale: "es_BO", type: "website",
+    images: [{ url: "/imagen-compartir", width: 1200, height: 630, alt: "XPANDER" }],
+  },
+  twitter: { card: "summary_large_image" },
+  // The tab icon follows the isotipo chosen in "Datos del negocio".
+  icons: { icon: "/api/brand/isotipo", apple: "/api/brand/isotipo" },
 };
 
 // Applies the visitor's saved band theme before the first paint.

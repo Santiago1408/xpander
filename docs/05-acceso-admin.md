@@ -27,7 +27,18 @@ Visita `http://localhost:3000/admin/login`, entra con el nombre de usuario elegi
 - Las operaciones de inicio y cierre de sesión aceptan únicamente el `Origin` configurado en `PUBLIC_ORIGIN`. En el Compose local es `http://localhost:3000`; usa exactamente esa dirección en el navegador.
 - Hay un límite básico de intentos por usuario y dirección de origen dentro del proceso. Para producción también se necesitarán límites en el proxy y pruebas con su configuración real.
 - En `/admin/cuenta` el administrador cambia su nombre visible, su nombre de usuario y su contraseña; cada cambio exige la contraseña actual y comparte el límite de intentos del inicio de sesión. Cambiar la contraseña cierra las sesiones de otros dispositivos.
-- No existe todavía recuperación automática de contraseña ni administración de múltiples cuentas. No borres el volumen de PostgreSQL para recuperar acceso.
+- No hay recuperación por correo ni administración de múltiples cuentas. No borres el volumen de PostgreSQL para recuperar acceso: usa el comando de la sección siguiente.
+
+## Recuperar el acceso si se olvida la contraseña
+
+Quien administre el servidor ejecuta, en la carpeta del proyecto:
+
+```sh
+docker compose --profile setup run --rm reset-password                              # producción (/opt/xpander)
+sudo docker compose -f compose.dev.yaml --profile setup run --rm reset-password     # desarrollo
+```
+
+El comando muestra las cuentas activas, pide el usuario y dos veces la contraseña nueva **sin mostrarla**, la guarda con las mismas reglas que el panel y cierra todas las sesiones abiertas de esa cuenta. Lo ideal es que el propietario escriba él mismo la contraseña nueva; después puede cambiarla cuando quiera en **Mi cuenta**.
 - El panel incluye contenido, catálogo, inventario y pedidos. El flujo completo de pedidos requiere una prueba local con PostgreSQL antes de preparar producción.
 
 Al preparar producción, la API deberá configurarse con `APP_ENV=production` y `PUBLIC_ORIGIN=https://xpander.duckdns.org` detrás del Caddy público. Esa configuración no se ha aplicado todavía en el VPS.

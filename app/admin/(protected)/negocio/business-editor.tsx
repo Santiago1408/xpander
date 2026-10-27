@@ -5,8 +5,20 @@ import { useEffect, useState, type FormEvent } from "react";
 import { socialPlatforms } from "../../../social-platforms";
 import { FileField, Feedback, Pill, ui } from "../../admin-ui";
 
-type Profile = { phone: string; socialLinks: Record<string, string>; qrMediaId: number | null; qrUrl: string; qrExpiresOn: string };
-type Media = { id: number; altText: string; isDeleted: boolean; purpose: "photo" | "qr" };
+type Profile = {
+  phone: string; socialLinks: Record<string, string>; qrMediaId: number | null; qrUrl: string; qrExpiresOn: string;
+  logoWordmarkMediaId: number | null; logoMarkMediaId: number | null;
+};
+type Media = { id: number; altText: string; isDeleted: boolean; purpose: "photo" | "qr" | "logo" };
+type LogoSlot = "logoWordmarkMediaId" | "logoMarkMediaId";
+
+// While no logo is chosen the store uses these bundled files.
+const logoSlots: { key: LogoSlot; title: string; hint: string; fallback: string; alt: string }[] = [
+  { key: "logoWordmarkMediaId", title: "Logotipo", alt: "Logotipo de la tienda", fallback: "/brand/xpander-wordmark.png",
+    hint: "El nombre de la tienda. Aparece en el encabezado, el carrito, el acceso al panel y el Generador." },
+  { key: "logoMarkMediaId", title: "Isotipo", alt: "Isotipo de la tienda", fallback: "/brand/xpander-x.png",
+    hint: "El símbolo. Aparece en el panel, en las fichas sin foto, en el Generador y como ícono de la pestaña del navegador." },
+];
 
 function dateString(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -58,6 +70,24 @@ export default function BusinessEditor() {
     finally { setBusy(false); }
   }
 
+  async function uploadLogo(slot: LogoSlot, title: string, file: File) {
+    if (!profile || busy) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("altText", `${title} de la tienda`);
+      form.append("purpose", "logo");
+      const response = await fetch("/api/admin/media", { method: "POST", body: form });
+      if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo subir el logo.");
+      const image = (await response.json()) as { id: number };
+      setProfile({ ...profile, [slot]: image.id });
+      setLibrary((items) => [{ id: image.id, altText: `${title} de la tienda`, isDeleted: false, purpose: "logo" }, ...items]);
+      setNotice(`${title} cargado. Pulsa Guardar cambios para usarlo en la tienda.`);
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "No se pudo subir el logo."); }
+    finally { setBusy(false); }
+  }
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!profile || busy) return;
@@ -66,7 +96,8 @@ export default function BusinessEditor() {
       const response = await fetch("/api/admin/business", { method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: profile.phone, socialLinks: profile.socialLinks,
-          qrMediaId: profile.qrMediaId, qrExpiresOn: profile.qrExpiresOn }) });
+          qrMediaId: profile.qrMediaId, qrExpiresOn: profile.qrExpiresOn,
+          logoWordmarkMediaId: profile.logoWordmarkMediaId, logoMarkMediaId: profile.logoMarkMediaId }) });
       if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo guardar.");
       setProfile((await response.json()) as Profile);
       setNotice("Datos del negocio guardados.");
@@ -79,7 +110,8 @@ export default function BusinessEditor() {
   const qrExpired = Boolean(profile.qrMediaId && profile.qrExpiresOn && profile.qrExpiresOn < today);
   return <form className="flex flex-col gap-5" onSubmit={(event) => void save(event)}>
     <Feedback error={error} notice={notice} />
-    <fieldset className="m-0 grid items-start gap-4 border-0 p-0 xl:grid-cols-[minmax(0,1fr)_400px]" disabled={busy}>
+    <fieldset className="m-0 grid grid-cols-1 items-start gap-4 border-0 p-0 xl:grid-cols-[minmax(0,1fr)_400px]" disabled={busy}>
+      <div className="flex min-w-0 flex-col gap-4">
       <section className={`${ui.card} ${ui.cardPad} flex flex-col gap-5`}>
         <div>
           <h2 className={ui.cardTitle}>Contacto</h2>
@@ -102,6 +134,48 @@ export default function BusinessEditor() {
           {!allNetworks && <button className={`${ui.link} mt-4`} onClick={() => setAllNetworks(true)} type="button">Mostrar todas las redes</button>}
         </div>
       </section>
+
+      <section className={`${ui.card} ${ui.cardPad} flex flex-col gap-5`}>
+        <div>
+          <h2 className={ui.cardTitle}>Logos de la tienda</h2>
+          <p className={`${ui.hint} mt-1`}>Usa un PNG o WebP con fondo transparente y el logo en un solo color oscuro: en las franjas oscuras de la tienda se muestra en blanco. Mientras no elijas uno, se usan los logos originales de XPANDER.</p>
+        </div>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {logoSlots.map((slot) => {
+            const current = profile[slot.key];
+            const src = current ? `/api/admin/media/${current}` : slot.fallback;
+            return <div className="flex min-w-0 flex-col gap-3" key={slot.key}>
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="m-0 text-sm font-semibold">{slot.title}</h3>
+                {current ? <Pill tone="solid">Personalizado</Pill> : <Pill tone="dashed">Por defecto</Pill>}
+              </div>
+              <p className={`${ui.hint} m-0`}>{slot.hint}</p>
+              <div className="grid grid-cols-2 border border-line">
+                <div className="flex h-24 items-center justify-center bg-white p-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- logo preview at its own proportions */}
+                  <img alt={`${slot.alt} sobre fondo claro`} className="max-h-full max-w-full object-contain" src={src} />
+                </div>
+                <div className="flex h-24 items-center justify-center bg-ink p-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- logo preview at its own proportions */}
+                  <img alt={`${slot.alt} sobre fondo oscuro`} className="max-h-full max-w-full object-contain [filter:brightness(0)_invert(1)]" src={src} />
+                </div>
+              </div>
+              <FileField accept="image/png,image/webp" disabled={busy} hint="PNG o WebP con fondo transparente"
+                label={current ? `Reemplazar ${slot.title.toLocaleLowerCase("es-BO")}` : `Subir ${slot.title.toLocaleLowerCase("es-BO")}`}
+                onFile={(file) => { if (file) void uploadLogo(slot.key, slot.title, file); }} />
+              {library.some((image) => !image.isDeleted && image.purpose === "logo") && <label className={ui.label}>O elegir un logo subido antes
+                <select className={ui.input} onChange={(event) => setProfile({ ...profile, [slot.key]: Number(event.target.value) || null })} value={current || 0}>
+                  <option value={0}>Logo original de XPANDER</option>
+                  {library.filter((image) => !image.isDeleted && image.purpose === "logo").map((image) =>
+                    <option key={image.id} value={image.id}>{image.altText || `Logo ${image.id}`}</option>)}
+                </select>
+              </label>}
+              {current && <button className={`${ui.link} self-start`} onClick={() => setProfile({ ...profile, [slot.key]: null })} type="button">Volver al logo por defecto</button>}
+            </div>;
+          })}
+        </div>
+      </section>
+      </div>
       <section className={`${ui.card} ${ui.cardPad} flex flex-col gap-4 xl:sticky xl:top-6`}>
         <div className="flex items-start justify-between gap-3">
           <h2 className={ui.cardTitle}>QR de transferencia</h2>

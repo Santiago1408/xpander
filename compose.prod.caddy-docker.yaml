@@ -1,0 +1,19 @@
+# Only when Caddy runs as a Docker container (for example in the Cabello stack):
+# joins the API and the web to Caddy's network under unique names.
+# Enable it with COMPOSE_FILE in .env; see docs/15-despliegue.md.
+services:
+  api:
+    networks:
+      private: {}
+      edge:
+        aliases: [xpander-api]
+  web:
+    networks:
+      private: {}
+      edge:
+        aliases: [xpander-web]
+
+networks:
+  edge:
+    external: true
+    name: ${CADDY_NETWORK:?Define CADDY_NETWORK en .env con la red del contenedor de Caddy}

@@ -61,7 +61,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("clear catalog, orders, content and inventory: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO business_profile (id, phone) VALUES (TRUE, '+591 70782380')`); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO business_profile (id, phone) VALUES (TRUE, '')`); err != nil {
 		return fmt.Errorf("restore empty business profile: %w", err)
 	}
 	for _, sequence := range []string{"xpander_product_code_seq", "xpander_variant_sku_seq"} {
