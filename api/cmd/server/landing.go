@@ -41,6 +41,8 @@ type landingSection struct {
 	IsVisible bool           `json:"isVisible"`
 	IsDeleted bool           `json:"isDeleted"`
 	Media     []landingMedia `json:"media"`
+	Contact   contactConfig  `json:"contact"`
+	Video     videoConfig    `json:"video"`
 }
 
 type landingDraft struct {
@@ -53,13 +55,15 @@ type landingDraft struct {
 }
 
 type sectionInput struct {
-	ID        int64   `json:"id"`
-	Type      string  `json:"type"`
-	Title     string  `json:"title"`
-	Body      string  `json:"body"`
-	IsVisible bool    `json:"isVisible"`
-	IsDeleted bool    `json:"isDeleted"`
-	MediaIDs  []int64 `json:"mediaIds"`
+	ID        int64         `json:"id"`
+	Type      string        `json:"type"`
+	Title     string        `json:"title"`
+	Body      string        `json:"body"`
+	IsVisible bool          `json:"isVisible"`
+	IsDeleted bool          `json:"isDeleted"`
+	MediaIDs  []int64       `json:"mediaIds"`
+	Contact   contactConfig `json:"contact"`
+	Video     videoConfig   `json:"video"`
 }
 
 type draftInput struct {
@@ -71,11 +75,13 @@ type draftInput struct {
 }
 
 type publishedSection struct {
-	Key   string         `json:"key"`
-	Type  string         `json:"type"`
-	Title string         `json:"title"`
-	Body  string         `json:"body"`
-	Media []landingMedia `json:"media"`
+	Key     string         `json:"key"`
+	Type    string         `json:"type"`
+	Title   string         `json:"title"`
+	Body    string         `json:"body"`
+	Media   []landingMedia `json:"media"`
+	Contact contactConfig  `json:"contact"`
+	Video   videoConfig    `json:"video"`
 }
 
 type publishedLanding struct {
@@ -160,7 +166,7 @@ func (service *landingService) loadDraft(ctx context.Context) (landingDraft, err
 		return draft, err
 	}
 	rows, err := service.pool.Query(ctx, `SELECT id, section_key, section_type,
-		COALESCE(title, ''), COALESCE(body, ''), is_visible, deleted_at IS NOT NULL
+		COALESCE(title, ''), COALESCE(body, ''), is_visible, deleted_at IS NOT NULL, config
 		FROM page_sections WHERE page_id = $1 ORDER BY sort_order, id`, pageID)
 	if err != nil {
 		return draft, err
@@ -168,10 +174,26 @@ func (service *landingService) loadDraft(ctx context.Context) (landingDraft, err
 	draft.Sections = []landingSection{}
 	for rows.Next() {
 		var section landingSection
+		var config []byte
 		if err := rows.Scan(&section.ID, &section.Key, &section.Type, &section.Title,
-			&section.Body, &section.IsVisible, &section.IsDeleted); err != nil {
+			&section.Body, &section.IsVisible, &section.IsDeleted, &config); err != nil {
 			rows.Close()
 			return draft, err
+		}
+		if err := json.Unmarshal(config, &section.Contact); err != nil {
+			rows.Close()
+			return draft, err
+		}
+		section.Contact.normalize()
+		if section.Type == "video" {
+			if err := json.Unmarshal(config, &section.Video); err != nil {
+				rows.Close()
+				return draft, err
+			}
+			if err := normalizeVideoConfig(&section.Video); err != nil {
+				rows.Close()
+				return draft, err
+			}
 		}
 		draft.Sections = append(draft.Sections, section)
 	}
@@ -226,7 +248,7 @@ func (service *landingService) sectionMedia(ctx context.Context, db queryer, sec
 
 func validSectionType(value string) bool {
 	switch value {
-	case "hero", "text", "gallery", "contact":
+	case "hero", "text", "gallery", "contact", "video", "featured":
 		return true
 	default:
 		return false
@@ -250,6 +272,12 @@ func validateDraft(input draftInput) error {
 				return errors.New("sección repetida")
 			}
 			seen[section.ID] = true
+		}
+		if err := validateContactConfig(section.Type, section.Contact); err != nil {
+			return err
+		}
+		if err := validateVideoConfig(section.Type, section.Video); err != nil {
+			return err
 		}
 		mediaSeen := map[int64]bool{}
 		for _, mediaID := range section.MediaIDs {
@@ -342,6 +370,21 @@ func (service *landingService) saveDraft(w http.ResponseWriter, r *http.Request)
 	}
 	for index, section := range *input.Sections {
 		sectionID := section.ID
+		section.Contact.normalize()
+		var config []byte
+		if section.Type == "video" {
+			if err := normalizeVideoConfig(&section.Video); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			config, err = json.Marshal(section.Video)
+		} else {
+			config, err = json.Marshal(section.Contact)
+		}
+		if err != nil {
+			serverError(w, "encode section contact", err)
+			return
+		}
 		if sectionID == 0 {
 			key, err := randomSectionKey()
 			if err != nil {
@@ -349,19 +392,19 @@ func (service *landingService) saveDraft(w http.ResponseWriter, r *http.Request)
 				return
 			}
 			err = tx.QueryRow(r.Context(), `INSERT INTO page_sections
-				(page_id, section_key, section_type, title, body, sort_order, is_visible, deleted_at, deleted_by_user_id)
+				(page_id, section_key, section_type, title, body, sort_order, is_visible, deleted_at, deleted_by_user_id, config)
 				VALUES ($1, $2, $3, $4, $5, $6, $7,
 				CASE WHEN $8::boolean THEN now() ELSE NULL END,
-				CASE WHEN $8::boolean THEN $9::bigint ELSE NULL END) RETURNING id`,
+				CASE WHEN $8::boolean THEN $9::bigint ELSE NULL END, $10::jsonb) RETURNING id`,
 				pageID, key, section.Type, section.Title, section.Body, index*10,
-				section.IsVisible, section.IsDeleted, user.ID).Scan(&sectionID)
+				section.IsVisible, section.IsDeleted, user.ID, string(config)).Scan(&sectionID)
 		} else {
 			_, err = tx.Exec(r.Context(), `UPDATE page_sections SET section_type=$2,
-				title=$3, body=$4, sort_order=$5, is_visible=$6,
+				title=$3, body=$4, sort_order=$5, is_visible=$6, config=$9::jsonb,
 				deleted_at=CASE WHEN $7::boolean THEN COALESCE(deleted_at, now()) ELSE NULL END,
 				deleted_by_user_id=CASE WHEN $7::boolean THEN COALESCE(deleted_by_user_id, $8::bigint) ELSE NULL END,
 				updated_at=now() WHERE id=$1`, sectionID, section.Type, section.Title,
-				section.Body, index*10, section.IsVisible, section.IsDeleted, user.ID)
+				section.Body, index*10, section.IsVisible, section.IsDeleted, user.ID, string(config))
 		}
 		if err != nil {
 			serverError(w, "save section", err)
@@ -467,7 +510,7 @@ func (service *landingService) publish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := tx.Query(r.Context(), `SELECT id, section_key, section_type,
-		COALESCE(title, ''), COALESCE(body, '') FROM page_sections
+		COALESCE(title, ''), COALESCE(body, ''), config FROM page_sections
 		WHERE page_id=$1 AND is_visible AND deleted_at IS NULL ORDER BY sort_order, id`, pageID)
 	if err != nil {
 		serverError(w, "read visible sections", err)
@@ -480,11 +523,35 @@ func (service *landingService) publish(w http.ResponseWriter, r *http.Request) {
 	var sectionRows []sectionRow
 	for rows.Next() {
 		var section sectionRow
+		var config []byte
 		if err := rows.Scan(&section.id, &section.Key, &section.Type,
-			&section.Title, &section.Body); err != nil {
+			&section.Title, &section.Body, &config); err != nil {
 			rows.Close()
 			serverError(w, "read visible sections", err)
 			return
+		}
+		if err := json.Unmarshal(config, &section.Contact); err != nil {
+			rows.Close()
+			serverError(w, "read section contact", err)
+			return
+		}
+		section.Contact.normalize()
+		if section.Type == "video" {
+			if err := json.Unmarshal(config, &section.Video); err != nil {
+				rows.Close()
+				serverError(w, "read section video", err)
+				return
+			}
+			if section.Video.URL == "" {
+				rows.Close()
+				http.Error(w, "agrega un enlace de video antes de publicar", http.StatusBadRequest)
+				return
+			}
+			if err := normalizeVideoConfig(&section.Video); err != nil {
+				rows.Close()
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 		}
 		sectionRows = append(sectionRows, section)
 	}

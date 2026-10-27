@@ -60,7 +60,7 @@ export default function TrashList() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-zinc-600">Un producto o variante sin pedidos puede eliminarse definitivamente junto con su inventario de prueba. Los pedidos y las publicaciones históricas se conservan; si un elemento los necesita, se mostrará el motivo del bloqueo.</p>
+      <p className="text-sm text-zinc-600">Un producto o variante sin pedidos puede eliminarse definitivamente junto con su inventario de prueba. Los pedidos se conservan. Al borrar una imagen, se sustituye por un marcador en todas las publicaciones que la usan, incluso la versión pública actual.</p>
       {error && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
       {notice && <p className="rounded-lg bg-green-50 p-4 text-sm text-green-800" role="status">{notice}</p>}
       <button className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 disabled:opacity-50"
@@ -74,7 +74,7 @@ export default function TrashList() {
           </li>)}
         </ul>
       )}
-      {confirmAll && <ConfirmPurge busy={busy} label="todos los elementos que puedan borrarse de la papelera"
+      {confirmAll && <ConfirmPurge busy={busy} label="todos los elementos que puedan borrarse de la papelera" media
         onCancel={() => setConfirmAll(false)} onConfirm={() => void emptyTrash()} />}
     </div>
   );

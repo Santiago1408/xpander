@@ -31,7 +31,9 @@ type trashService struct {
 
 func redactedLandingSnapshot(raw []byte, mediaID int64) ([]byte, error) {
 	var snapshot publishedLanding
-	if err := json.Unmarshal(raw, &snapshot); err != nil { return nil, err }
+	if err := json.Unmarshal(raw, &snapshot); err != nil {
+		return nil, err
+	}
 	for sectionIndex := range snapshot.Sections {
 		for imageIndex := range snapshot.Sections[sectionIndex].Media {
 			image := &snapshot.Sections[sectionIndex].Media[imageIndex]
@@ -49,24 +51,42 @@ func redactPublicationMedia(ctx context.Context, tx pgx.Tx, mediaID int64) error
 	rows, err := tx.Query(ctx, `SELECT pub.id, pub.snapshot FROM page_publications pub
 		JOIN page_publication_media pm ON pm.publication_id=pub.id
 		WHERE pm.media_id=$1 FOR UPDATE OF pub`, mediaID)
-	if err != nil { return err }
-	type version struct { id int64; snapshot []byte }
+	if err != nil {
+		return err
+	}
+	type version struct {
+		id       int64
+		snapshot []byte
+	}
 	versions := []version{}
 	for rows.Next() {
 		var item version
-		if err := rows.Scan(&item.id, &item.snapshot); err != nil { rows.Close(); return err }
+		if err := rows.Scan(&item.id, &item.snapshot); err != nil {
+			rows.Close()
+			return err
+		}
 		versions = append(versions, item)
 	}
 	err = rows.Err()
 	rows.Close()
-	if err != nil { return err }
-	if len(versions) == 0 { return nil }
-	if _, err := tx.Exec(ctx, `SET LOCAL xpander.allow_media_redaction = 'on'`); err != nil { return err }
+	if err != nil {
+		return err
+	}
+	if len(versions) == 0 {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, `SET LOCAL xpander.allow_media_redaction = 'on'`); err != nil {
+		return err
+	}
 	for _, version := range versions {
 		body, err := redactedLandingSnapshot(version.snapshot, mediaID)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE page_publications SET snapshot=$2::jsonb WHERE id=$1`,
-			version.id, string(body)); err != nil { return err }
+			version.id, string(body)); err != nil {
+			return err
+		}
 	}
 	_, err = tx.Exec(ctx, `DELETE FROM page_publication_media WHERE media_id=$1`, mediaID)
 	return err
@@ -328,6 +348,11 @@ func (service *trashService) purge(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if kind == "media" {
+		if _, err := tx.Exec(r.Context(), `UPDATE business_profile SET qr_media_id=NULL,
+			qr_expires_on=NULL, updated_at=now() WHERE qr_media_id=$1`, id); err != nil {
+			serverError(w, "detach deleted payment QR", err)
+			return
+		}
 		if err := redactPublicationMedia(r.Context(), tx, id); err != nil {
 			serverError(w, "redact published image", err)
 			return

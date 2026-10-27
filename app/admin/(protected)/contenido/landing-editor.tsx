@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import LandingSections, { type LandingMedia, type LandingSection } from "../../../landing-sections";
+import type { CatalogProduct } from "../../../catalogo/catalog-shop";
+import { socialPlatforms } from "../../../social-platforms";
 import TrashActions, { type TrashRef } from "../papelera/trash-actions";
 
 type DraftSection = LandingSection & {
@@ -28,6 +30,8 @@ const sectionTypes = [
   { value: "text", label: "Texto informativo" },
   { value: "gallery", label: "Galería" },
   { value: "contact", label: "Contacto" },
+  { value: "video", label: "Video" },
+  { value: "featured", label: "Productos destacados" },
 ];
 
 export default function LandingEditor() {
@@ -40,15 +44,17 @@ export default function LandingEditor() {
   const [trashed, setTrashed] = useState<TrashRef | null>(null);
   const [altTexts, setAltTexts] = useState<Record<string, string>>({});
   const [library, setLibrary] = useState<LibraryMedia[]>([]);
+  const [featuredProducts, setFeaturedProducts] = useState<CatalogProduct[]>([]);
   const [selectedMedia, setSelectedMedia] = useState<Record<string, number>>({});
 
   useEffect(() => {
     async function load() {
       try {
-        const [draftResponse, historyResponse, mediaResponse] = await Promise.all([
+        const [draftResponse, historyResponse, mediaResponse, productsResponse] = await Promise.all([
           fetch("/api/admin/landing", { cache: "no-store" }),
           fetch("/api/admin/landing/publications", { cache: "no-store" }),
           fetch("/api/admin/media", { cache: "no-store" }),
+          fetch("/api/catalog/products", { cache: "no-store" }),
         ]);
         if (!draftResponse.ok || !historyResponse.ok || !mediaResponse.ok) {
           throw new Error("No se pudo cargar el editor.");
@@ -56,6 +62,8 @@ export default function LandingEditor() {
         setDraft((await draftResponse.json()) as Draft);
         setHistory((await historyResponse.json()) as Publication[]);
         setLibrary((await mediaResponse.json()) as LibraryMedia[]);
+        if (productsResponse.ok) setFeaturedProducts(((await productsResponse.json()) as CatalogProduct[])
+          .filter((product) => product.isFeatured && product.variants.length > 0));
       } catch {
         setError("No se pudo cargar el editor. Comprueba que la API esté activa.");
       }
@@ -88,6 +96,8 @@ export default function LandingEditor() {
       isVisible: true,
       isDeleted: false,
       media: [],
+      contact: { socialLinks: {}, mapUrl: "" },
+      video: { url: "", embedUrl: "" },
     };
     setDraft((current) => current && { ...current, sections: [...current.sections, section] });
     setDirty(true);
@@ -122,6 +132,8 @@ export default function LandingEditor() {
           isVisible: section.isVisible,
           isDeleted: section.isDeleted,
           mediaIds: section.media.map((item) => item.id),
+          contact: section.contact || { socialLinks: {}, mapUrl: "" },
+          video: section.video || { url: "", embedUrl: "" },
         })),
       }),
     });
@@ -319,6 +331,37 @@ export default function LandingEditor() {
                   onChange={(event) => changeSection(index, { body: event.target.value })} rows={4} value={section.body} />
               </label>
             </div>
+            {section.type === "contact" && (
+              <div className="mt-5 space-y-4 rounded-lg border border-zinc-200 p-4">
+                <h4 className="font-medium">Redes sociales y ubicación</h4>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {socialPlatforms.map(({ key, label }) => (
+                    <label className="text-sm font-medium" key={key}>{label}
+                      <input className="mt-2 w-full rounded-lg border border-zinc-300 p-3" placeholder="https://..." type="url"
+                        onChange={(event) => changeSection(index, { contact: {
+                          ...section.contact, socialLinks: { ...section.contact?.socialLinks, [key]: event.target.value },
+                        } })} value={section.contact?.socialLinks?.[key] || ""} />
+                    </label>
+                  ))}
+                  <label className="text-sm font-medium sm:col-span-2">Enlace de ubicación de Google Maps
+                    <input className="mt-2 w-full rounded-lg border border-zinc-300 p-3" placeholder="https://www.google.com/maps/embed?pb=..." type="url"
+                      onChange={(event) => changeSection(index, { contact: { ...section.contact, mapUrl: event.target.value } })}
+                      value={section.contact?.mapUrl || ""} />
+                    <span className="mt-1 block font-normal text-zinc-500">En Google Maps usa Compartir → Incorporar un mapa → Copiar HTML; pega aquí solo la URL que aparece en src. El mapa aparecerá en el pie de página.</span>
+                  </label>
+                </div>
+              </div>
+            )}
+            {section.type === "video" && <label className="mt-5 block text-sm font-medium">Enlace de YouTube o Vimeo *
+              <input className="mt-2 w-full rounded-lg border border-zinc-300 p-3" placeholder="https://www.youtube.com/watch?v=..." type="url"
+                onChange={(event) => changeSection(index, { video: { url: event.target.value, embedUrl: "" } })}
+                value={section.video?.url || ""} />
+              <span className="mt-1 block font-normal text-zinc-500">Puedes guardar un borrador sin enlace; para publicar esta sección visible, el video debe estar completo.</span>
+            </label>}
+            {section.type === "featured" && <p className="mt-5 rounded-lg bg-zinc-50 p-4 text-sm text-zinc-600">
+              Los productos de esta sección se eligen marcando «Destacado» en cada ficha del catálogo. Sus precios e imágenes se leen del catálogo activo.
+              <Link className="ml-1 underline" href="/admin/catalogo/productos">Abrir productos</Link>
+            </p>}
             <div className="mt-5">
               <p className="text-sm font-medium">Imágenes</p>
               <div className="mt-3 flex flex-wrap gap-3">
@@ -384,7 +427,7 @@ export default function LandingEditor() {
         <h2 className="text-xl font-semibold">Vista previa del borrador</h2>
         <p className="mt-2 text-sm text-zinc-600">Solo se muestran las secciones visibles y no eliminadas.</p>
         <div className="mt-5 overflow-hidden rounded-xl border border-zinc-200 bg-white">
-          <LandingSections landing={draft} />
+          <LandingSections featuredProducts={featuredProducts} landing={draft} />
         </div>
       </div>
       <div className="rounded-xl border border-zinc-200 bg-white p-6">

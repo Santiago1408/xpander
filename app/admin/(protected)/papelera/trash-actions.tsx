@@ -8,14 +8,15 @@ export const trashKindLabel: Record<string, string> = {
   product: "Producto", variant: "Variante", media: "Imagen", section: "Sección de la landing",
 };
 
-export function ConfirmPurge({ label, busy, onCancel, onConfirm }: {
-  label: string; busy: boolean; onCancel: () => void; onConfirm: () => void;
+export function ConfirmPurge({ label, busy, onCancel, onConfirm, media = false }: {
+  label: string; busy: boolean; onCancel: () => void; onConfirm: () => void; media?: boolean;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="presentation">
       <div aria-labelledby="purge-title" aria-modal="true" className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" role="dialog">
         <h2 className="text-xl font-semibold" id="purge-title">Confirmar eliminación definitiva</h2>
         <p className="mt-3 text-sm text-zinc-700">Se eliminará «{label}» de forma permanente. No se podrá restaurar.</p>
+        {media && <p className="mt-3 text-sm text-amber-800">Si la imagen aparece en publicaciones históricas, allí se reemplazará por «Imagen eliminada». También dejará de mostrarse si está en la versión pública actual o si era el QR activo.</p>}
         <div className="mt-6 flex flex-wrap justify-end gap-3">
           <button className="rounded-lg border border-zinc-300 px-4 py-2 text-sm" disabled={busy}
             onClick={onCancel} type="button">Cancelar</button>
@@ -61,7 +62,7 @@ export default function TrashActions({ item, onChanged, notice = false }: {
           onClick={() => setConfirming(true)} type="button">Eliminar definitivamente</button>
       </div>
       {error && <p className="mt-2 text-sm text-red-700" role="alert">{error}</p>}
-      {confirming && <ConfirmPurge busy={busy} label={item.label}
+      {confirming && <ConfirmPurge busy={busy} label={item.label} media={item.kind === "media"}
         onCancel={() => setConfirming(false)} onConfirm={() => void act("DELETE")} />}
     </div>
   );

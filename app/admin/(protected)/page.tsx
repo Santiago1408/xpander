@@ -15,9 +15,7 @@ export default function AdminHomePage() {
         <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
           href="/admin/catalogo/productos">Productos</Link>
         <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
-          href="/admin/catalogo/marcas">Marcas</Link>
-        <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
-          href="/admin/catalogo/etiquetas">Estilos y público</Link>
+          href="/admin/catalogo/valores">Marcas, estilos y público</Link>
         <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
           href="/admin/medios">Banco de imágenes</Link>
         <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
@@ -26,6 +24,8 @@ export default function AdminHomePage() {
           href="/admin/inventario">Inventario</Link>
         <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
           href="/admin/sucursales">Sucursal activa</Link>
+        <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
+          href="/admin/negocio">Datos del negocio</Link>
         <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
           href="/admin/pedidos">Pedidos</Link>
       </div>

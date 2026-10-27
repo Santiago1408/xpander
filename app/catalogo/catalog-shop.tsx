@@ -13,9 +13,12 @@ export type CatalogProduct = {
 
 type CartItem = { variantId: number; quantity: number };
 type Branch = { id: number; name: string; address: string; instructions: string };
-type Receipt = { id: number; number: string; status: string; totalMinor: number; whatsappUrl: string };
+type Receipt = { id: number; number: string; status: string; totalMinor: number; whatsappUrl: string;
+  paymentMethod: "whatsapp" | "qr"; paymentStatus: string; accessToken: string };
+type QRProfile = { qrUrl: string; qrExpiresOn: string };
 
 const cartStorageKey = "xpander_cart_v1";
+const pendingQRKey = "xpander_pending_qr_order_v1";
 
 function money(minor: number): string {
   const whole = Math.floor(minor / 100).toLocaleString("es-BO");
@@ -36,6 +39,11 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerNote, setCustomerNote] = useState("");
   const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"whatsapp" | "qr">("whatsapp");
+  const [qrProfile, setQRProfile] = useState<QRProfile | null>(null);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofBusy, setProofBusy] = useState(false);
+  const [proofError, setProofError] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [branchError, setBranchError] = useState("");
@@ -95,6 +103,26 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
     })();
   }, []);
 
+  useEffect(() => {
+    void (async () => {
+      try {
+        const response = await fetch("/api/business", { cache: "no-store" });
+        if (!response.ok) return;
+        const profile = (await response.json()) as QRProfile;
+        if (profile.qrUrl) setQRProfile(profile);
+      } catch { /* Ordering by WhatsApp remains available. */ }
+    })();
+    try {
+      const stored = window.sessionStorage.getItem(pendingQRKey);
+      if (stored) {
+        const previous = JSON.parse(stored) as Receipt;
+        if (previous.id > 0 && previous.paymentMethod === "qr" && previous.accessToken) {
+          setReceipt(previous); setCartOpen(true);
+        }
+      }
+    } catch { window.sessionStorage.removeItem(pendingQRKey); }
+  }, []);
+
   const cartLines = cart.flatMap((item) => {
     const found = variantMap.get(item.variantId);
     return found ? [{ ...item, ...found }] : [];
@@ -120,6 +148,7 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
   }, [products, search, styleFilter, audienceFilter, brandFilter, colorFilter]);
 
   function updateCart(variantId: number, quantity: number) {
+    if (receipt?.paymentMethod === "qr" && receipt.paymentStatus !== "submitted") return;
     setReceipt(null); setError("");
     pendingRequest.current = null;
     setCart((current) => {
@@ -136,7 +165,7 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
     setBusy(true); setError(""); setReceipt(null);
     try {
       const data = {
-        pickupBranchId, customerName: customerName.trim(), customerPhone: customerPhone.trim(),
+        pickupBranchId, paymentMethod, customerName: customerName.trim(), customerPhone: customerPhone.trim(),
         customerNote: customerNote.trim(), items: cartLines.map((line) => ({
           variantId: line.variantId, quantity: line.quantity,
           expectedUnitPriceMinor: line.variant.priceMinor,
@@ -155,9 +184,27 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
       setCart([]);
       pendingRequest.current = null;
       setReceipt(saved);
+      if (saved.paymentMethod === "qr") window.sessionStorage.setItem(pendingQRKey, JSON.stringify(saved));
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "No se pudo registrar el pedido.");
     } finally { setBusy(false); }
+  }
+
+  async function uploadProof(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!receipt || !proofFile || proofBusy) return;
+    setProofBusy(true); setProofError("");
+    try {
+      const body = new FormData();
+      body.append("file", proofFile);
+      const response = await fetch(`/api/orders/${receipt.id}/receipt`, { method: "POST",
+        headers: { "X-Order-Token": receipt.accessToken }, body });
+      if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo subir el comprobante.");
+      setReceipt({ ...receipt, paymentStatus: "submitted" });
+      window.sessionStorage.removeItem(pendingQRKey);
+      setProofFile(null);
+    } catch (failure) { setProofError(failure instanceof Error ? failure.message : "No se pudo subir el comprobante."); }
+    finally { setProofBusy(false); }
   }
 
   return <>
@@ -203,7 +250,7 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
       {filteredProducts.map((product) => {
         const prices = product.variants.map((variant) => variant.priceMinor);
         const lowest = Math.min(...prices);
-        return <article className="overflow-hidden rounded-2xl border border-zinc-200 bg-white" key={product.id}>
+        return <article className="overflow-hidden rounded-2xl border border-zinc-200 bg-white" id={`producto-${product.id}`} key={product.id}>
           {product.media[0] ? <Image alt={product.media[0].altText} className="aspect-[4/3] w-full object-cover"
             height={600} src={product.media[0].url} unoptimized width={800} /> :
             <div className="flex aspect-[4/3] items-center justify-center bg-zinc-100 text-sm tracking-[0.25em] text-zinc-400">XPANDER</div>}
@@ -246,10 +293,35 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
         </div>
         {receipt ? <div className="mt-6 rounded-xl border border-green-200 bg-green-50 p-5">
           <p className="font-semibold">Pedido {receipt.number} registrado como pendiente</p>
-          <p className="mt-2 text-sm">Total: {money(receipt.totalMinor)}. Ahora abre WhatsApp y envía el mensaje preparado al negocio.</p>
+          <p className="mt-2 text-sm">Total: {money(receipt.totalMinor)}.</p>
+          {receipt.paymentMethod === "qr" && <div className="mt-5 rounded-lg border border-green-200 bg-white p-4">
+            <h3 className="font-semibold">Transferencia por QR</h3>
+            {receipt.paymentStatus === "submitted" ?
+              <p className="mt-2 text-sm">Comprobante recibido. El administrador verificará el abono en su banca antes de confirmar el pedido.</p> : <>
+                {qrProfile?.qrUrl ? <>
+                  <p className="mt-2 text-sm">Escanea o descarga el QR vigente. Transfiere el total exacto y comprueba el beneficiario en tu aplicación bancaria.</p>
+                  <Image alt="QR de transferencia vigente" className="mx-auto mt-4 max-h-72 w-auto rounded-lg border object-contain"
+                    height={288} src={qrProfile.qrUrl} unoptimized width={288} />
+                  <a className="mt-3 inline-block text-sm text-blue-800 underline" download="xpander-qr.png" href={qrProfile.qrUrl}>Descargar QR</a>
+                  <p className="mt-1 text-xs text-zinc-600">Vigente hasta {qrProfile.qrExpiresOn}. Incluye {receipt.number} como referencia si tu banco lo permite.</p>
+                </> : <p className="mt-2 text-sm text-amber-800">El QR ya no está disponible. Escribe al negocio antes de realizar una transferencia.</p>}
+                <form className="mt-5 space-y-3 border-t pt-4" onSubmit={(event) => void uploadProof(event)}>
+                  <label className="block text-sm">Subir comprobante PNG, JPEG o PDF *
+                    <input accept="image/png,image/jpeg,application/pdf" className="mt-2 block w-full" required type="file"
+                      onChange={(event) => setProofFile(event.target.files?.[0] || null)} />
+                  </label>
+                  <button className="rounded-lg bg-zinc-950 px-4 py-2 text-sm text-white disabled:opacity-50"
+                    disabled={!proofFile || proofBusy} type="submit">{proofBusy ? "Subiendo…" : "Enviar comprobante"}</button>
+                  {proofError && <p className="text-sm text-red-700" role="alert">{proofError}</p>}
+                </form>
+              </>}
+          </div>}
+          <p className="mt-4 text-sm">Abre WhatsApp y envía el detalle del pedido al negocio.</p>
           <a className="mt-4 inline-block rounded-lg bg-green-700 px-4 py-3 font-medium text-white"
             href={receipt.whatsappUrl} rel="noopener noreferrer" target="_blank">Abrir WhatsApp para enviar</a>
           <p className="mt-3 text-xs text-green-900">El pedido quedó guardado aunque cierres WhatsApp. Abrir el enlace no confirma que se haya enviado el mensaje.</p>
+          {receipt.paymentStatus === "submitted" && <button className="mt-4 block text-sm underline" type="button"
+            onClick={() => setReceipt(null)}>Hacer otro pedido</button>}
         </div> : cartLines.length === 0 ? <p className="mt-8 text-zinc-600">Tu carrito está vacío.</p> : <>
           <ul className="mt-6 divide-y divide-zinc-200">{cartLines.map((line) => <li className="flex items-start gap-3 py-4" key={line.variantId}>
             <div className="min-w-0 flex-1">
@@ -290,6 +362,13 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
               <textarea className="mt-1 w-full rounded-lg border border-zinc-300 p-2" disabled={busy} maxLength={500}
                 onChange={(event) => setCustomerNote(event.target.value)} rows={3} value={customerNote} />
             </label>
+            <fieldset className="space-y-2 rounded-lg border border-zinc-200 p-4 text-sm">
+              <legend className="px-1 font-medium">Forma de pago</legend>
+              <label className="flex items-center gap-2"><input checked={paymentMethod === "whatsapp"} disabled={busy}
+                onChange={() => setPaymentMethod("whatsapp")} type="radio" />Coordinar por WhatsApp</label>
+              {qrProfile?.qrUrl && <label className="flex items-center gap-2"><input checked={paymentMethod === "qr"} disabled={busy}
+                onChange={() => setPaymentMethod("qr")} type="radio" />Transferir por QR y subir comprobante</label>}
+            </fieldset>
             <button className="w-full rounded-lg bg-zinc-950 px-4 py-3 font-medium text-white disabled:opacity-50"
               disabled={busy || !pickupBranchId} type="submit">{busy ? "Registrando…" : "Registrar pedido"}</button>
           </form>

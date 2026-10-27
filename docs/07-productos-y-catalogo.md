@@ -2,7 +2,7 @@
 
 ## Registro
 
-En `/admin/catalogo/productos`, el propietario registra en una pantalla nombre, descripción, estilo, público, color, marca opcional, imágenes, precios, tallas y stock. Cada color es un producto diferente. El nombre, los textos estructurados y las tallas se guardan en mayúsculas; la descripción conserva su escritura. Estilo y público se administran en `/admin/catalogo/etiquetas`, igual que las [marcas](06-marcas-y-tallas.md) en su apartado. El color permanece como texto de la ficha.
+En `/admin/catalogo/productos`, el propietario registra en una pantalla nombre, descripción, estilo, público, color, marca opcional, imágenes, precios, tallas y stock. Cada color es un producto diferente. El nombre, los textos estructurados y las tallas se guardan en mayúsculas; la descripción conserva su escritura. Estilo, público y [marcas](06-marcas-y-tallas.md) se administran en `/admin/catalogo/valores`. El color permanece como texto de la ficha.
 
 La primera variante forma parte del formulario desde el comienzo. Su talla alfabética, numérica o ambas son obligatorias. Si se añade otra variante, la talla ya introducida sigue siendo la de la primera; cada nueva variante tiene sus propios campos de talla, precio normal, oferta opcional y entradas de stock. El precio de oferta debe ser menor que el normal. El formulario impide repetir una talla alfabética o numérica dentro del producto.
 
@@ -23,7 +23,7 @@ Las imágenes pueden subirse desde la ficha o elegirse del banco; la primera es 
 Para verificar el flujo local:
 
 1. Aplica todas las migraciones y ejecuta el [reinicio de datos de prueba](10-reinicio-datos-prueba.md) solo si deseas la tienda vacía.
-2. Crea una marca en `/admin/catalogo/marcas` y un producto con una talla alfabética o numérica. Guarda y comprueba sus códigos de cuatro y seis dígitos.
+2. Crea una marca en `/admin/catalogo/valores` y un producto con una talla alfabética o numérica. Guarda y comprueba sus códigos de cuatro y seis dígitos.
 3. Añade una entrada de stock de esa variante en dos sucursales, con cantidades y costos distintos. Comprueba ambos saldos y movimientos en `/admin/inventario`.
 4. Edita el producto y añade una segunda variante. Comprueba que la talla original permanece en la primera. Intenta duplicar una talla en la segunda: la API debe rechazarla.
 5. Registra una nueva compra desde Inventario con otro costo. El movimiento anterior debe conservar su propio costo. Elimina la marca: el panel debe advertir que hay productos asociados y, tras confirmar, la ficha debe permanecer sin marca.

@@ -22,6 +22,9 @@ type Order = {
   totalMinor: number;
   createdAt: string;
   confirmedAt: string | null;
+  paymentMethod: "whatsapp" | "qr";
+  paymentStatus: "not_required" | "awaiting_receipt" | "submitted" | "verified" | "rejected";
+  hasReceipt: boolean;
   items: OrderItem[];
 };
 
@@ -69,6 +72,19 @@ export default function OrdersEditor() {
     }
   }
 
+  async function review(order: Order, decision: "verify" | "reject") {
+    if (busyId !== null) return;
+    setBusyId(order.id); setError(""); setNotice("");
+    try {
+      const response = await fetch(`/api/admin/orders/${order.id}/payment/${decision}`, { method: "POST" });
+      if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo revisar el comprobante.");
+      await refresh();
+      setNotice(decision === "verify" ? `Pago de ${order.number} verificado. Ya puedes confirmar el pedido.` :
+        `Comprobante de ${order.number} rechazado. El cliente puede subir otro.`);
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "No se pudo revisar el comprobante."); }
+    finally { setBusyId(null); }
+  }
+
   return <div className="space-y-5">
     {error && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
     {notice && <p className="rounded-lg bg-green-50 p-4 text-sm text-green-800" role="status">{notice}</p>}
@@ -89,6 +105,18 @@ export default function OrdersEditor() {
           <p className="text-lg font-semibold">{money(order.totalMinor)}</p>
         </div>
         <p className="mt-4 text-sm"><span className="font-medium">Cliente:</span> {order.customerName} · {order.customerPhone}</p>
+        <p className="mt-2 text-sm"><span className="font-medium">Pago:</span> {order.paymentMethod === "qr" ? "Transferencia por QR" : "Coordinación por WhatsApp"}
+          {order.paymentMethod === "qr" && ` · ${({ awaiting_receipt: "sin comprobante", submitted: "comprobante pendiente de revisión",
+            verified: "abono verificado", rejected: "comprobante rechazado", not_required: "sin pago" })[order.paymentStatus]}`}</p>
+        {order.hasReceipt && <a className="mt-2 inline-block text-sm text-blue-800 underline"
+          href={`/api/admin/orders/${order.id}/receipt`}>Descargar último comprobante</a>}
+        {order.paymentStatus === "submitted" && <div className="mt-3 flex flex-wrap gap-2">
+          <button className="rounded-lg border border-green-700 px-3 py-2 text-sm text-green-800 disabled:opacity-50"
+            disabled={busyId !== null} onClick={() => void review(order, "verify")} type="button">Verifiqué el abono en mi banca</button>
+          <button className="rounded-lg border border-red-700 px-3 py-2 text-sm text-red-700 disabled:opacity-50"
+            disabled={busyId !== null} onClick={() => void review(order, "reject")} type="button">Rechazar comprobante</button>
+        </div>}
+        {order.paymentStatus === "submitted" && <p className="mt-2 text-xs text-amber-800">La imagen del comprobante no prueba el abono. Comprueba monto, cuenta y movimiento real en tu banca antes de verificar.</p>}
         {order.customerNote && <p className="mt-1 whitespace-pre-line text-sm"><span className="font-medium">Nota:</span> {order.customerNote}</p>}
         <ul className="mt-4 divide-y divide-zinc-100 border-y border-zinc-100 text-sm">
           {order.items.map((item, index) => <li className="flex flex-wrap justify-between gap-x-4 py-2" key={index}>
@@ -98,7 +126,8 @@ export default function OrdersEditor() {
         </ul>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {order.status === "pending" && <button className="rounded-lg bg-zinc-950 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            disabled={busyId !== null} onClick={() => void confirm(order)} type="button">
+            disabled={busyId !== null || (order.paymentMethod === "qr" && order.paymentStatus !== "verified")}
+            onClick={() => void confirm(order)} type="button">
             {busyId === order.id ? "Confirmando…" : "Confirmar y descontar inventario"}
           </button>}
           {order.confirmedAt && <span className="text-xs text-zinc-500">Confirmado el {new Date(order.confirmedAt).toLocaleString("es-BO")}</span>}

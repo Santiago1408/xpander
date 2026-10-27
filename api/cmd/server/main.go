@@ -67,6 +67,7 @@ func run() error {
 		return errors.New("MEDIA_DIR is required")
 	}
 	registerLandingRoutes(mux, pool, admin, mediaDir)
+	registerBusinessRoutes(mux, pool, admin)
 	registerBrandRoutes(mux, pool, admin)
 	registerTermRoutes(mux, pool, admin)
 	registerBranchRoutes(mux, pool, admin)
@@ -81,7 +82,7 @@ func run() error {
 	if !validWhatsAppNumber(whatsAppNumber) {
 		return errors.New("ORDER_WHATSAPP_NUMBER must contain 8 to 15 digits with country code")
 	}
-	registerOrderRoutes(mux, pool, admin, whatsAppNumber)
+	registerOrderRoutes(mux, pool, admin, whatsAppNumber, mediaDir)
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           mux,

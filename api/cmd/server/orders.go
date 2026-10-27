@@ -32,6 +32,7 @@ type checkoutItem struct {
 
 type checkoutInput struct {
 	RequestKey     string         `json:"requestKey"`
+	PaymentMethod  string         `json:"paymentMethod"`
 	PickupBranchID int64          `json:"pickupBranchId"`
 	CustomerName   string         `json:"customerName"`
 	CustomerPhone  string         `json:"customerPhone"`
@@ -45,6 +46,9 @@ type orderReceipt struct {
 	Status      string `json:"status"`
 	TotalMinor  int64  `json:"totalMinor"`
 	WhatsAppURL string `json:"whatsappUrl"`
+	PaymentMethod string `json:"paymentMethod"`
+	PaymentStatus string `json:"paymentStatus"`
+	AccessToken string `json:"accessToken"`
 }
 
 type orderLine struct {
@@ -60,6 +64,7 @@ type orderService struct {
 	pool           *pgxpool.Pool
 	admin          *adminAuth
 	whatsAppNumber string
+	mediaDir string
 }
 
 var errOrderKeyReuse = errors.New("la clave de este pedido ya se usó con otros datos")
@@ -76,15 +81,22 @@ func validWhatsAppNumber(number string) bool {
 	return true
 }
 
-func registerOrderRoutes(mux *http.ServeMux, pool *pgxpool.Pool, admin *adminAuth, whatsAppNumber string) {
-	service := &orderService{pool: pool, admin: admin, whatsAppNumber: whatsAppNumber}
+func registerOrderRoutes(mux *http.ServeMux, pool *pgxpool.Pool, admin *adminAuth, whatsAppNumber, mediaDir string) {
+	service := &orderService{pool: pool, admin: admin, whatsAppNumber: whatsAppNumber, mediaDir: mediaDir}
 	mux.HandleFunc("GET /api/pickup-branches", service.listBranches)
 	mux.HandleFunc("POST /api/orders", service.checkout)
 	mux.HandleFunc("GET /api/admin/orders", service.listAdmin)
 	mux.HandleFunc("POST /api/admin/orders/{id}/confirm", service.confirm)
+	mux.HandleFunc("POST /api/orders/{id}/receipt", service.uploadPaymentProof)
+	mux.HandleFunc("GET /api/orders/{id}/payment", service.customerPaymentStatus)
+	mux.HandleFunc("GET /api/admin/orders/{id}/receipt", service.downloadPaymentProof)
+	mux.HandleFunc("POST /api/admin/orders/{id}/payment/verify", service.verifyPayment)
+	mux.HandleFunc("POST /api/admin/orders/{id}/payment/reject", service.rejectPayment)
 }
 
 func normalizeCheckout(input *checkoutInput) error {
+	if input.PaymentMethod == "" { input.PaymentMethod = "whatsapp" }
+	if input.PaymentMethod != "whatsapp" && input.PaymentMethod != "qr" { return errors.New("método de pago inválido") }
 	input.CustomerName = strings.Join(strings.Fields(input.CustomerName), " ")
 	input.CustomerPhone = strings.TrimSpace(input.CustomerPhone)
 	input.CustomerNote = strings.TrimSpace(input.CustomerNote)
@@ -118,12 +130,13 @@ func normalizeCheckout(input *checkoutInput) error {
 
 func checkoutFingerprint(input checkoutInput) string {
 	payload := struct {
+		PaymentMethod string `json:"paymentMethod"`
 		PickupBranchID int64          `json:"pickupBranchId"`
 		CustomerName   string         `json:"customerName"`
 		CustomerPhone  string         `json:"customerPhone"`
 		CustomerNote   string         `json:"customerNote"`
 		Items          []checkoutItem `json:"items"`
-	}{input.PickupBranchID, input.CustomerName, input.CustomerPhone, input.CustomerNote, input.Items}
+	}{input.PaymentMethod, input.PickupBranchID, input.CustomerName, input.CustomerPhone, input.CustomerNote, input.Items}
 	encoded, _ := json.Marshal(payload)
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
@@ -164,9 +177,11 @@ func existingOrder(ctx context.Context, tx pgx.Tx, requestKey, fingerprint strin
 	var receipt orderReceipt
 	var previousFingerprint, whatsAppNumber, message string
 	err := tx.QueryRow(ctx, `SELECT id, status, total_minor, whatsapp_number,
+		payment_method, payment_status, customer_access_token::text,
 		whatsapp_message, COALESCE(request_fingerprint,'') FROM orders
 		WHERE client_request_id=$1::uuid`, requestKey).Scan(&receipt.ID, &receipt.Status,
-		&receipt.TotalMinor, &whatsAppNumber, &message, &previousFingerprint)
+		&receipt.TotalMinor, &whatsAppNumber, &receipt.PaymentMethod, &receipt.PaymentStatus,
+		&receipt.AccessToken, &message, &previousFingerprint)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return receipt, false, nil
 	}
@@ -201,6 +216,9 @@ func buildOrderMessage(id int64, input checkoutInput, branch pickupBranch, lines
 			line.ProductName, line.VariantLabel, formatOrderMoney(line.UnitPrice*line.Quantity)))
 	}
 	parts = append(parts, "Total: "+formatOrderMoney(total))
+	if input.PaymentMethod == "qr" {
+		parts = append(parts, "Pago: transferencia por QR; comprobante cargado o pendiente en el sistema. Verifica el abono en banca antes de confirmar.")
+	}
 	if input.CustomerNote != "" {
 		parts = append(parts, "Nota: "+input.CustomerNote)
 	}
@@ -252,6 +270,14 @@ func (service *orderService) checkout(w http.ResponseWriter, r *http.Request) {
 		serverError(w, "find pickup branch", err)
 		return
 	}
+	if input.PaymentMethod == "qr" {
+		var available bool
+		err = tx.QueryRow(r.Context(), `SELECT EXISTS (SELECT 1 FROM business_profile b
+			JOIN media m ON m.id=b.qr_media_id WHERE b.id=TRUE AND m.deleted_at IS NULL
+			AND b.qr_expires_on >= (now() AT TIME ZONE 'America/La_Paz')::date)`).Scan(&available)
+		if err != nil { serverError(w, "check active payment QR", err); return }
+		if !available { http.Error(w, "el QR no está disponible; elige WhatsApp", http.StatusConflict); return }
+	}
 	lines := make([]orderLine, 0, len(input.Items))
 	var total int64
 	for _, item := range input.Items {
@@ -291,16 +317,19 @@ func (service *orderService) checkout(w http.ResponseWriter, r *http.Request) {
 		lines = append(lines, line)
 	}
 	var id int64
+	var accessToken string
+	paymentStatus := "not_required"
+	if input.PaymentMethod == "qr" { paymentStatus = "awaiting_receipt" }
 	err = tx.QueryRow(r.Context(), `INSERT INTO orders
 		(client_request_id, request_fingerprint, pickup_branch_id, pickup_branch_name,
 		pickup_address, pickup_instructions, customer_name, customer_phone, customer_note,
-		total_minor, whatsapp_number, whatsapp_message)
+		total_minor, whatsapp_number, whatsapp_message, payment_method, payment_status)
 		VALUES ($1::uuid,$2,$3,$4,NULLIF($5,''),NULLIF($6,''),$7,$8,NULLIF($9,''),
-			$10,$11,'Pedido en preparación')
-		ON CONFLICT (client_request_id) DO NOTHING RETURNING id`, input.RequestKey,
+			$10,$11,'Pedido en preparación',$12,$13)
+		ON CONFLICT (client_request_id) DO NOTHING RETURNING id, customer_access_token::text`, input.RequestKey,
 		fingerprint, branch.ID, branch.Name, branch.Address, branch.Instructions,
 		input.CustomerName, input.CustomerPhone, input.CustomerNote, total,
-		service.whatsAppNumber).Scan(&id)
+		service.whatsAppNumber, input.PaymentMethod, paymentStatus).Scan(&id, &accessToken)
 	if errors.Is(err, pgx.ErrNoRows) {
 		receipt, found, lookupErr := existingOrder(r.Context(), tx, input.RequestKey, fingerprint)
 		if lookupErr != nil {
@@ -342,7 +371,8 @@ func (service *orderService) checkout(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusCreated, orderReceipt{ID: id, Number: orderNumber(id),
 		Status: "pending", TotalMinor: total,
-		WhatsAppURL: orderWhatsAppURL(service.whatsAppNumber, message)})
+		WhatsAppURL: orderWhatsAppURL(service.whatsAppNumber, message),
+		PaymentMethod: input.PaymentMethod, PaymentStatus: paymentStatus, AccessToken: accessToken})
 }
 
 func orderStockError(w http.ResponseWriter, operation string, err error) {

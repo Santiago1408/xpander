@@ -24,6 +24,9 @@ func TestLoad(t *testing.T) {
 		"014_catalog_terms.sql",
 		"015_inventory_purge.sql",
 		"016_publication_media_redaction.sql",
+		"017_business_profile.sql",
+		"018_qr_expiration.sql",
+		"019_manual_qr_payments.sql",
 	}
 	if len(files) < len(expected) {
 		t.Fatalf("expected at least %d migrations, got %d", len(expected), len(files))

@@ -227,8 +227,7 @@ export default function QuickProductEditor() {
         {products.filter((item) => !item.isDeleted).map((item) => <option key={item.id} value={item.id}>
           {item.code} · {item.name}</option>)}
       </select>
-      <Link className="text-sm underline" href="/admin/catalogo/marcas">Administrar marcas</Link>
-      <Link className="text-sm underline" href="/admin/catalogo/etiquetas">Administrar estilos y público</Link>
+      <Link className="text-sm underline" href="/admin/catalogo/valores">Administrar marcas, estilos y público</Link>
       <Link className="text-sm underline" href="/admin/inventario">Ver inventario</Link>
     </div>
     {error && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}

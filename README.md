@@ -34,4 +34,6 @@ El [carrito y los pedidos por WhatsApp](docs/11-carrito-y-pedidos.md) explican c
 
 La [verificación del catálogo, la sucursal, el carrito y la papelera](docs/12-verificacion-catalogo-sucursal-papelera.md) cubre las migraciones y los flujos de administración recientes.
 
+La [guía de contacto, datos del negocio y borrado de imágenes publicadas](docs/13-contacto-negocio-y-redaccion.md) explica la configuración del mapa, redes y QR.
+
 Para empezar las pruebas con catálogo, pedidos, contenido e imágenes vacíos conservando la cuenta y las sucursales, sigue el [reinicio de datos de prueba](docs/10-reinicio-datos-prueba.md).

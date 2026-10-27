@@ -30,6 +30,9 @@ type adminOrder struct {
 	TotalMinor       int64            `json:"totalMinor"`
 	CreatedAt        time.Time        `json:"createdAt"`
 	ConfirmedAt      *time.Time       `json:"confirmedAt"`
+	PaymentMethod    string           `json:"paymentMethod"`
+	PaymentStatus    string           `json:"paymentStatus"`
+	HasReceipt       bool             `json:"hasReceipt"`
 	Items            []adminOrderItem `json:"items"`
 }
 
@@ -62,7 +65,8 @@ func (service *orderService) listAdmin(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(context.Background())
 	rows, err := tx.Query(r.Context(), `SELECT id, status, customer_name, customer_phone,
 		COALESCE(customer_note,''), pickup_branch_name, COALESCE(pickup_address,''),
-		total_minor, created_at, confirmed_at
+		total_minor, created_at, confirmed_at, payment_method, payment_status,
+		EXISTS (SELECT 1 FROM order_payment_proofs op WHERE op.order_id=orders.id)
 		FROM orders ORDER BY created_at DESC, id DESC LIMIT 100`)
 	if err != nil {
 		serverError(w, "list orders", err)
@@ -76,7 +80,8 @@ func (service *orderService) listAdmin(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&item.ID, &item.Status, &item.CustomerName,
 			&item.CustomerPhone, &item.CustomerNote, &item.PickupBranchName,
 			&item.PickupAddress, &item.TotalMinor,
-			&item.CreatedAt, &item.ConfirmedAt); err != nil {
+			&item.CreatedAt, &item.ConfirmedAt, &item.PaymentMethod,
+			&item.PaymentStatus, &item.HasReceipt); err != nil {
 			rows.Close()
 			serverError(w, "scan order", err)
 			return
@@ -141,10 +146,10 @@ func (service *orderService) confirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(context.Background())
-	var status string
+	var status, paymentMethod, paymentStatus string
 	var branchID int64
-	err = tx.QueryRow(r.Context(), `SELECT status, pickup_branch_id FROM orders
-		WHERE id=$1 FOR UPDATE`, id).Scan(&status, &branchID)
+	err = tx.QueryRow(r.Context(), `SELECT status, pickup_branch_id, payment_method, payment_status FROM orders
+		WHERE id=$1 FOR UPDATE`, id).Scan(&status, &branchID, &paymentMethod, &paymentStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		http.NotFound(w, r)
 		return
@@ -159,6 +164,10 @@ func (service *orderService) confirm(w http.ResponseWriter, r *http.Request) {
 	}
 	if status != "pending" {
 		http.Error(w, "el pedido no está pendiente", http.StatusConflict)
+		return
+	}
+	if paymentMethod == "qr" && paymentStatus != "verified" {
+		http.Error(w, "verifica el abono bancario antes de confirmar el pedido con QR", http.StatusConflict)
 		return
 	}
 	rows, err := tx.Query(r.Context(), `SELECT id, COALESCE(variant_id,0), quantity

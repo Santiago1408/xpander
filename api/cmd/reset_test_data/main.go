@@ -43,8 +43,8 @@ func run() error {
 	}
 	defer conn.Close(context.Background())
 	var version int
-	if err := conn.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version < 14 {
-		return errors.New("apply migration 014 before resetting test data")
+	if err := conn.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version < 19 {
+		return errors.New("apply migration 019 before resetting test data")
 	}
 	tx, err := conn.Begin(ctx)
 	if err != nil {
@@ -52,12 +52,16 @@ func run() error {
 	}
 	defer tx.Rollback(context.Background())
 	_, err = tx.Exec(ctx, `TRUNCATE TABLE
-		stock_movements, branch_stock, order_items, orders,
+		business_profile,
+		stock_movements, branch_stock, order_payment_proofs, order_items, orders,
 		product_media, product_variants, products, brands, catalog_terms,
 		page_publication_media, page_publications, page_section_media,
 		page_sections, pages, media, site_settings RESTART IDENTITY`)
 	if err != nil {
 		return fmt.Errorf("clear catalog, orders, content and inventory: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO business_profile (id, phone) VALUES (TRUE, '+591 70782380')`); err != nil {
+		return fmt.Errorf("restore empty business profile: %w", err)
 	}
 	for _, sequence := range []string{"xpander_product_code_seq", "xpander_variant_sku_seq"} {
 		if _, err := tx.Exec(ctx, "ALTER SEQUENCE "+sequence+" RESTART WITH 1"); err != nil {

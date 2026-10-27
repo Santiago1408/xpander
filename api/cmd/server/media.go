@@ -153,6 +153,7 @@ func (service *landingService) listMedia(w http.ResponseWriter, r *http.Request)
 		(SELECT count(*) FROM product_media pm WHERE pm.media_id=m.id)
 		+ (SELECT count(*) FROM page_section_media sm WHERE sm.media_id=m.id)
 		+ (SELECT count(*) FROM page_publication_media pubm WHERE pubm.media_id=m.id)
+		+ (SELECT count(*) FROM business_profile bp WHERE bp.qr_media_id=m.id)
 		FROM media m WHERE m.kind='image' AND m.source_type='local'
 		ORDER BY m.id DESC`)
 	if err != nil {
@@ -231,6 +232,9 @@ func (service *landingService) serveStoredMedia(w http.ResponseWriter, r *http.R
 	if !admin {
 		query += ` AND (
 			EXISTS (SELECT 1 FROM page_publication_media WHERE media_id=$1)
+			OR EXISTS (SELECT 1 FROM business_profile WHERE qr_media_id=$1
+				AND qr_expires_on >= (now() AT TIME ZONE 'America/La_Paz')::date
+				AND media.deleted_at IS NULL)
 			OR EXISTS (SELECT 1 FROM product_media pm
 				JOIN products p ON p.id=pm.product_id
 				WHERE pm.media_id=$1 AND p.status='active'
@@ -255,10 +259,6 @@ func (service *landingService) serveStoredMedia(w http.ResponseWriter, r *http.R
 	}
 	w.Header().Set("Content-Type", mimeType)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	if admin {
-		w.Header().Set("Cache-Control", "no-store")
-	} else {
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	}
+	w.Header().Set("Cache-Control", "no-store")
 	http.ServeFile(w, r, filepath.Join(service.mediaDir, key))
 }

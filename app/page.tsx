@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import LandingSections, { type PublishedLanding } from "./landing-sections";
+import type { CatalogProduct } from "./catalogo/catalog-shop";
 
 const apiOrigin = process.env.XPANDER_API_ORIGIN ?? "http://127.0.0.1:8080";
 
@@ -40,7 +41,17 @@ async function PublishedHome() {
     return <p className="py-24 text-center text-zinc-600">La tienda no está disponible por el momento.</p>;
   }
   const landing = (await response.json()) as PublishedLanding;
-  return <LandingSections landing={landing} />;
+  let featuredProducts: CatalogProduct[] = [];
+  if (landing.sections.some((section) => section.type === "featured")) {
+    try {
+      const productsResponse = await fetch(`${apiOrigin}/api/catalog/products`, { cache: "no-store" });
+      if (productsResponse.ok) {
+        featuredProducts = ((await productsResponse.json()) as CatalogProduct[])
+          .filter((product) => product.isFeatured && product.variants.length > 0);
+      }
+    } catch { /* Landing remains available if the catalog request fails. */ }
+  }
+  return <LandingSections featuredProducts={featuredProducts} landing={landing} />;
 }
 
 export default function Home() {
