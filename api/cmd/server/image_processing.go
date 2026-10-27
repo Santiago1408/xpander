@@ -58,7 +58,7 @@ func uploadedImageFormat(data []byte) string {
 
 // ImageMagick is installed in the API container. The host may use v6 (identify/
 // convert) or v7 (magick identify/magick); arguments never pass through a shell.
-func runImageTool(ctx context.Context, operation string, args ...string) ([]byte, error) {
+func runImageTool(ctx context.Context, directory, operation string, args ...string) ([]byte, error) {
 	name := operation
 	if _, err := exec.LookPath("magick"); err == nil {
 		name = "magick"
@@ -69,7 +69,8 @@ func runImageTool(ctx context.Context, operation string, args ...string) ([]byte
 	command := exec.CommandContext(ctx, name, args...)
 	command.Env = append(os.Environ(),
 		"MAGICK_MEMORY_LIMIT=256MiB", "MAGICK_MAP_LIMIT=512MiB",
-		"MAGICK_DISK_LIMIT=1GiB", "MAGICK_THREAD_LIMIT=1", "MAGICK_TIME_LIMIT=30")
+		"MAGICK_DISK_LIMIT=1GiB", "MAGICK_THREAD_LIMIT=1", "MAGICK_TIME_LIMIT=30",
+		"MAGICK_TEMPORARY_PATH="+directory)
 	output, err := command.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%s failed: %w: %s", operation, err, strings.TrimSpace(string(output)))
@@ -78,7 +79,7 @@ func runImageTool(ctx context.Context, operation string, args ...string) ([]byte
 }
 
 func imageDimensions(ctx context.Context, path string) (int, int, error) {
-	output, err := runImageTool(ctx, "identify", "-ping", "-format", "%w %h %n\n", path)
+	output, err := runImageTool(ctx, filepath.Dir(path), "identify", "-ping", "-format", "%w %h %n\n", path)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -177,7 +178,7 @@ func processUploadedImage(ctx context.Context, directory string, data []byte, pu
 		arguments = append(arguments, "-resize", "1920x1920>", "-quality", "82",
 			"-define", "webp:method=4", "webp:"+mainPath)
 	}
-	if _, err = runImageTool(ctx, "convert", arguments...); err != nil {
+	if _, err = runImageTool(ctx, directory, "convert", arguments...); err != nil {
 		return result, err
 	}
 	result.Main, err = savedImageFile(ctx, mainPath, "", mainKey, mainMime)
@@ -197,7 +198,7 @@ func processUploadedImage(ctx context.Context, directory string, data []byte, pu
 		key := fmt.Sprintf("%s-%s.webp", base, preset.key)
 		path := filepath.Join(directory, key)
 		created = append(created, path)
-		_, err = runImageTool(ctx, "convert", inputPath+"[0]", "-auto-orient", "-strip",
+		_, err = runImageTool(ctx, directory, "convert", inputPath+"[0]", "-auto-orient", "-strip",
 			"-resize", fmt.Sprintf("%dx%d>", preset.limit, preset.limit), "-quality", "80",
 			"-define", "webp:method=4", "webp:"+path)
 		if err != nil {

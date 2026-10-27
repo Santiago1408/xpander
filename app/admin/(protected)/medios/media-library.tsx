@@ -3,7 +3,7 @@
 import MediaImage from "../../../media-image";
 import { useEffect, useState, type FormEvent } from "react";
 import TrashActions, { type TrashRef } from "../papelera/trash-actions";
-import { EmptyState, Feedback, Pill, ui } from "../../admin-ui";
+import { ChipRow, EmptyState, FileField, Feedback, Pill, ui } from "../../admin-ui";
 
 type MediaItem = { id: number; url: string; altText: string; isDeleted: boolean;
   useCount: number; purpose: "photo" | "qr"; bytes: number };
@@ -86,11 +86,11 @@ export default function MediaLibrary() {
   return (
     <div className="flex flex-col gap-5">
       <form className="grid gap-4 bg-white p-5 sm:p-6 md:grid-cols-[1fr_1fr_auto] md:items-end" onSubmit={(event) => void upload(event)}>
-        <label className={ui.label}>Imagen PNG, JPEG o WebP *
-          <input accept="image/png,image/jpeg,image/webp" className={ui.file} id="media-upload-file"
-            onChange={(event) => setFile(event.target.files?.[0] || null)} required type="file" />
-          <span className={ui.hint}>Hasta 8 MiB. Se generan tamaños optimizados al subirla.</span>
-        </label>
+        <div className={ui.label}>Imagen *
+          <FileField accept="image/png,image/jpeg,image/webp" disabled={busy} fileName={file?.name} hint="PNG, JPEG o WebP de hasta 8 MiB"
+            id="media-upload-file" label="Elegir imagen" onFile={setFile} />
+          <span className={ui.hint}>Se generan tamaños optimizados al subirla.</span>
+        </div>
         <label className={ui.label}>Descripción de la imagen
           <input className={ui.input} maxLength={200} onChange={(event) => setAltText(event.target.value)} placeholder="Texto alternativo" value={altText} />
           <span className={ui.hint}>Se usa como texto alternativo y rótulo en galerías.</span>
@@ -100,11 +100,11 @@ export default function MediaLibrary() {
       <Feedback error={error} notice={notice} />
       {trashed && <TrashActions item={trashed} notice onChanged={() => window.location.reload()} />}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div aria-label="Filtrar imágenes" className="flex flex-wrap gap-1.5" role="group">
+        <ChipRow label="Filtrar imágenes">
           {[["all", "Activas"], ["photo", "Fotografías"], ["qr", "Códigos QR"], ["trash", "En papelera"]].map(([value, label]) =>
-            <button aria-pressed={view === value} className={ui.chip(view === value)} key={value} onClick={() => setView(value)} type="button">{label}
+            <button aria-pressed={view === value} className={`${ui.chip(view === value)} shrink-0`} key={value} onClick={() => setView(value)} type="button">{label}
               <span className="font-mono text-[11px] opacity-70">{(items || []).filter((item) => value === "trash" ? item.isDeleted : !item.isDeleted && (value === "all" || item.purpose === value)).length}</span></button>)}
-        </div>
+        </ChipRow>
         <span className="font-mono text-xs text-graphite">{items?.length ?? 0} archivos · {formatBytes(totalBytes)}</span>
       </div>
       {!items ? <p className="text-sm text-graphite">Cargando imágenes…</p> : visible.length === 0 ? <EmptyState>{items.length === 0 ? "Todavía no hay imágenes." : "No hay imágenes en esta vista."}</EmptyState> : (

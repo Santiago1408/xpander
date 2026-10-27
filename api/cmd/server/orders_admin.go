@@ -31,6 +31,8 @@ type adminOrder struct {
 	CreatedAt        time.Time        `json:"createdAt"`
 	ConfirmedAt      *time.Time       `json:"confirmedAt"`
 	CancelledAt      *time.Time       `json:"cancelledAt"`
+	Channel          string           `json:"channel"`
+	DiscountMinor    int64            `json:"discountMinor"`
 	DeliveryMethod   string           `json:"deliveryMethod"`
 	PaymentMethod    string           `json:"paymentMethod"`
 	PaymentStatus    string           `json:"paymentStatus"`
@@ -67,7 +69,7 @@ func (service *orderService) listAdmin(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(context.Background())
 	rows, err := tx.Query(r.Context(), `SELECT id, status, customer_name, customer_phone,
 		COALESCE(customer_note,''), pickup_branch_name, COALESCE(pickup_address,''),
-		total_minor, created_at, confirmed_at, cancelled_at, delivery_method, payment_method, payment_status,
+		total_minor, created_at, confirmed_at, cancelled_at, channel, discount_minor, delivery_method, payment_method, payment_status,
 		EXISTS (SELECT 1 FROM order_payment_proofs op WHERE op.order_id=orders.id)
 		FROM orders ORDER BY created_at DESC, id DESC LIMIT 100`)
 	if err != nil {
@@ -82,7 +84,7 @@ func (service *orderService) listAdmin(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&item.ID, &item.Status, &item.CustomerName,
 			&item.CustomerPhone, &item.CustomerNote, &item.PickupBranchName,
 			&item.PickupAddress, &item.TotalMinor,
-			&item.CreatedAt, &item.ConfirmedAt, &item.CancelledAt, &item.DeliveryMethod, &item.PaymentMethod,
+			&item.CreatedAt, &item.ConfirmedAt, &item.CancelledAt, &item.Channel, &item.DiscountMinor, &item.DeliveryMethod, &item.PaymentMethod,
 			&item.PaymentStatus, &item.HasReceipt); err != nil {
 			rows.Close()
 			serverError(w, "scan order", err)
@@ -226,8 +228,10 @@ func (service *orderService) confirm(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// cancel closes a pending order before its payment is verified, for example an
-// abandoned QR order. Nothing was debited from stock, so no movement is needed.
+// cancel closes a pending order. An unverified order (for example an abandoned QR
+// order) can always be cancelled. A verified one only when its branch no longer has
+// the stock to fulfil it, and the owner must acknowledge refunding the customer by
+// hand. Nothing was debited from stock, so no movement is needed.
 func (service *orderService) cancel(w http.ResponseWriter, r *http.Request) {
 	user, ok := service.requireOwner(w, r)
 	if !ok {
@@ -258,7 +262,18 @@ func (service *orderService) cancel(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if err := cancellable(status, paymentStatus); err != nil {
+	stockShort := false
+	if status == "pending" && paymentStatus == "verified" {
+		err = tx.QueryRow(r.Context(), `SELECT EXISTS (SELECT 1 FROM order_items oi
+			JOIN orders o ON o.id=oi.order_id
+			LEFT JOIN branch_stock s ON s.variant_id=oi.variant_id AND s.branch_id=o.pickup_branch_id
+			WHERE oi.order_id=$1 AND (oi.variant_id IS NULL OR COALESCE(s.quantity,0) < oi.quantity))`, id).Scan(&stockShort)
+		if err != nil {
+			serverError(w, "check stock for cancellation", err)
+			return
+		}
+	}
+	if err := cancellable(status, paymentStatus, stockShort, r.URL.Query().Get("refundAcknowledged") == "1"); err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
@@ -274,12 +289,18 @@ func (service *orderService) cancel(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func cancellable(status, paymentStatus string) error {
+func cancellable(status, paymentStatus string, stockShort, refundAcknowledged bool) error {
 	if status != "pending" {
 		return errors.New("solo se pueden cancelar pedidos pendientes")
 	}
-	if paymentStatus == "verified" {
-		return errors.New("el pago de este pedido ya fue verificado; no se puede cancelar")
+	if paymentStatus != "verified" {
+		return nil
+	}
+	if !stockShort {
+		return errors.New("el pago está verificado y hay stock suficiente en la sucursal; confirma el pedido en lugar de cancelarlo")
+	}
+	if !refundAcknowledged {
+		return errors.New("el pago ya fue verificado; confirma que devolverás el dinero al cliente antes de cancelar")
 	}
 	return nil
 }

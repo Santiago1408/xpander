@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import ProductCard from "../product-card";
-import { catalogBrands, colorSwatch, formatBOB, lowestPrice, titleCase } from "../shop-format";
+import { catalogBrands, colorSwatch, formatBOB, lowestPrice, productInStock, titleCase } from "../shop-format";
 
 export type CatalogProduct = {
   id: number; code: string; slug: string; name: string; description: string; style: string;
   audience: string; color: string; brandName: string; isFeatured: boolean;
   variants: { id: number; code: string; sizeAlpha: string; sizeNumeric: string;
-    priceMinor: number; compareAtPriceMinor: number | null }[];
+    priceMinor: number; compareAtPriceMinor: number | null; availableBranchIds?: number[] }[];
   media: { id: number; url: string; altText: string }[];
 };
 
@@ -95,6 +95,7 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
       (sizes.length === 0 || productSizes(product).some((size) => sizes.includes(size))) &&
       lowestPrice(product) <= priceLimit * 100 &&
       (!text || `${product.name} ${product.code} ${product.description} ${product.brandName}`.toLocaleUpperCase("es-BO").includes(text)));
+    if (sort === "") result.sort((a, b) => Number(productInStock(b)) - Number(productInStock(a)));
     if (sort === "recientes") result.sort((a, b) => b.id - a.id);
     if (sort === "precio-asc") result.sort((a, b) => lowestPrice(a) - lowestPrice(b));
     if (sort === "precio-desc") result.sort((a, b) => lowestPrice(b) - lowestPrice(a));
@@ -128,9 +129,6 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
       <div className="flex flex-wrap items-end justify-between gap-6 border-b border-ink pb-8 pt-10">
         <h1 className="xp-display m-0 text-[clamp(48px,7vw,112px)] leading-[0.9] tracking-[-0.02em] [overflow-wrap:anywhere]">{title}</h1>
         <div className="flex w-full max-w-[380px] flex-col gap-4">
-          <p className="m-0 text-[15px] leading-relaxed text-graphite">
-            Agrega tus prendas al carrito y paga con QR. {filtered.length} {filtered.length === 1 ? "producto" : "productos"}.
-          </p>
           <label className="flex h-11 items-center gap-2.5 border border-line px-3.5 focus-within:border-ink" htmlFor="buscar">
             <svg aria-hidden="true" className="size-[18px] shrink-0 text-graphite" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
             <span className="sr-only">Buscar por nombre, código o marca</span>

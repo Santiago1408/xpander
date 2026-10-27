@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useState, type FormEvent } from "react";
 import { socialPlatforms } from "../../../social-platforms";
-import { Feedback, Pill, ui } from "../../admin-ui";
+import { FileField, Feedback, Pill, ui } from "../../admin-ui";
 
 type Profile = { phone: string; socialLinks: Record<string, string>; qrMediaId: number | null; qrUrl: string; qrExpiresOn: string };
 type Media = { id: number; altText: string; isDeleted: boolean; purpose: "photo" | "qr" };
@@ -24,6 +24,7 @@ export default function BusinessEditor() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [allNetworks, setAllNetworks] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -92,12 +93,13 @@ export default function BusinessEditor() {
           <h3 className="m-0 text-sm font-semibold">Redes sociales del negocio</h3>
           <p className={`${ui.hint} mt-1`}>Solo se muestran los enlaces completados. Deben empezar con https://.</p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            {socialPlatforms.map(({ key, label }) => <label className={ui.label} key={key}>{label}
+            {socialPlatforms.filter(({ key }) => allNetworks || profile.socialLinks[key] || ["instagram", "facebook", "tiktok", "whatsapp"].includes(key)).map(({ key, label }) => <label className={ui.label} key={key}>{label}
               <input className={ui.input} placeholder="https://..." type="url"
                 onChange={(event) => setProfile({ ...profile, socialLinks: { ...profile.socialLinks, [key]: event.target.value } })}
                 value={profile.socialLinks[key] || ""} />
             </label>)}
           </div>
+          {!allNetworks && <button className={`${ui.link} mt-4`} onClick={() => setAllNetworks(true)} type="button">Mostrar todas las redes</button>}
         </div>
       </section>
       <section className={`${ui.card} ${ui.cardPad} flex flex-col gap-4 xl:sticky xl:top-6`}>
@@ -111,10 +113,8 @@ export default function BusinessEditor() {
             height={320} src={profile.qrUrl || `/api/admin/media/${profile.qrMediaId}`} unoptimized width={320} /> :
             <span className="font-mono text-xs uppercase tracking-[0.08em] text-graphite">Sin QR activo</span>}
         </div>
-        <label className={ui.label}>Subir QR PNG, JPEG o WebP
-          <input accept="image/png,image/jpeg,image/webp" className={ui.file} type="file"
-            onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ""; }} />
-        </label>
+        <FileField accept="image/png,image/jpeg,image/webp" disabled={busy} hint="PNG, JPEG o WebP del QR de tu banco"
+          label={profile.qrMediaId ? "Reemplazar QR" : "Subir QR"} onFile={(file) => { if (file) void upload(file); }} />
         <label className={ui.label}>O elegir del banco
           <select className={ui.input}
             onChange={(event) => {
@@ -137,7 +137,7 @@ export default function BusinessEditor() {
         </>}
       </section>
     </fieldset>
-    <div className="sticky bottom-20 z-30 flex flex-wrap items-center gap-3 border border-line bg-white p-4 shadow-lg lg:bottom-4">
+    <div className="sticky bottom-[calc(1rem+env(safe-area-inset-bottom))] z-30 flex flex-wrap items-center gap-3 border border-line bg-white p-3 shadow-lg sm:p-4 lg:bottom-4">
       <button className={ui.primary} disabled={busy} type="submit">{busy ? "Guardando…" : "Guardar cambios"}</button>
       <span className="text-[13px] text-graphite">Los cambios se aplican al guardar; no requieren publicar la landing.</span>
     </div>

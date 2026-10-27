@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import LandingSections, { type LandingMedia, type LandingSection } from "../../../landing-sections";
+import LandingSections, { defaultBenefits, type BenefitItem, type CategoriesConfig, type CategoryTile, type LandingMedia, type LandingSection } from "../../../landing-sections";
+import { BenefitIcon, benefitIconOptions } from "../../../benefit-icons";
+import { catalogBrands, catalogTerms, titleCase } from "../../../shop-format";
 import type { CatalogProduct } from "../../../catalogo/catalog-shop";
 import { socialPlatforms } from "../../../social-platforms";
 import TrashActions, { type TrashRef } from "../papelera/trash-actions";
 import MediaImage from "../../../media-image";
-import { EmptyState, Feedback, PageHeader, Pill, ui } from "../../admin-ui";
+import { EmptyState, FileField, Feedback, IconButton, PageHeader, Pill, ui } from "../../admin-ui";
 
 type DraftSection = LandingSection & {
   id: number;
@@ -34,7 +36,11 @@ const sectionTypes = [
   { value: "contact", label: "Contacto", hint: "Redes sociales y mapa en el pie de página." },
   { value: "video", label: "Video", hint: "Franja con reproductor de YouTube o Vimeo." },
   { value: "featured", label: "Productos destacados", hint: "Fichas marcadas como «Destacado» en Productos." },
+  { value: "benefits", label: "Beneficios", hint: "Franja de hasta 6 beneficios con ícono, título y texto (recojo, pago, envío…). Reemplaza la franja automática antes del pie." },
+  { value: "categories", label: "Bloques de imágenes", hint: "Imágenes grandes con su texto y enlace al catálogo; como tarjetas o paneles, en 1 a 3 columnas. Reemplaza el bloque automático «Compra por estilo»." },
 ];
+
+const blankTile = (): CategoryTile => ({ mediaId: 0, title: "", linkKind: "", linkValue: "" });
 
 export default function LandingEditor() {
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -102,6 +108,14 @@ export default function LandingEditor() {
       contact: { socialLinks: {}, mapUrl: "" },
       video: { url: "", embedUrl: "" },
     };
+    if (type === "benefits") section.benefits = { items: defaultBenefits.map((item) => ({ ...item })) };
+    if (type === "categories") {
+      // Start from the catalog styles; each block still needs its own image.
+      const styles = catalogTerms(catalogProducts).styles;
+      section.title = "Compra por estilo";
+      section.categories = { layout: "cards", columns: Math.min(3, Math.max(2, styles.length)) || 2,
+        tiles: styles.length ? styles.slice(0, 6).map((style) => ({ mediaId: 0, title: titleCase(style), linkKind: "style" as const, linkValue: style })) : [blankTile(), blankTile()] };
+    }
     setDraft((current) => current && { ...current, sections: [...current.sections, section] });
     setExpanded((current) => ({ ...current, [section.key]: true }));
     setDirty(true);
@@ -135,9 +149,11 @@ export default function LandingEditor() {
           body: section.body,
           isVisible: section.isVisible,
           isDeleted: section.isDeleted,
-          mediaIds: section.media.map((item) => item.id),
+          mediaIds: section.type === "categories" ? (section.categories?.tiles || []).map((tile) => tile.mediaId).filter(Boolean) : section.media.map((item) => item.id),
           contact: section.contact || { socialLinks: {}, mapUrl: "" },
           video: section.video || { url: "", embedUrl: "" },
+          ...(section.type === "categories" ? { categories: section.categories || { layout: "cards", columns: 2, tiles: [] } } : {}),
+          ...(section.type === "benefits" ? { benefits: section.benefits || { items: [] } } : {}),
         })),
       }),
     });
@@ -247,8 +263,171 @@ export default function LandingEditor() {
     }
   }
 
+  // Block images live in page_section_media too; keep section.media in tile order.
+  function changeCategories(index: number, changes: Partial<CategoriesConfig>, extra: LandingMedia[] = []) {
+    const section = draft!.sections[index];
+    const config = { ...(section.categories || { layout: "cards" as const, columns: 2, tiles: [] }), ...changes };
+    const known = new Map([...section.media, ...library, ...extra].map((item) => [item.id, item]));
+    changeSection(index, { categories: config, media: config.tiles.flatMap((tile) => known.get(tile.mediaId) ? [known.get(tile.mediaId)!] : []) });
+  }
+
+  function changeTile(index: number, tileIndex: number, changes: Partial<CategoryTile>, extra: LandingMedia[] = []) {
+    const tiles = [...(draft!.sections[index].categories?.tiles || [])];
+    tiles[tileIndex] = { ...tiles[tileIndex], ...changes };
+    changeCategories(index, { tiles }, extra);
+  }
+
+  async function uploadTileImage(index: number, tileIndex: number, file: File) {
+    if (!draft || busy) return;
+    setBusy(true); setError("");
+    try {
+      const data = new FormData();
+      data.append("file", file);
+      data.append("altText", draft.sections[index].categories?.tiles[tileIndex]?.title || draft.sections[index].title);
+      const response = await fetch("/api/admin/media", { method: "POST", body: data });
+      if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo subir la imagen. Usa PNG, JPEG o WebP de hasta 8 MiB.");
+      const media = (await response.json()) as LandingMedia;
+      changeTile(index, tileIndex, { mediaId: media.id }, [media]);
+      const mediaResponse = await fetch("/api/admin/media", { cache: "no-store" });
+      if (mediaResponse.ok) setLibrary((await mediaResponse.json()) as LibraryMedia[]);
+      setNotice("Imagen subida. Guarda el borrador para asociarla al bloque.");
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "No se pudo subir la imagen.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!draft) {
     return <p className="text-sm text-graphite">{error || "Cargando editor…"}</p>;
+  }
+
+  const terms = catalogTerms(catalogProducts);
+  const linkGroups = [
+    { kind: "style" as const, label: "Estilos", values: terms.styles },
+    { kind: "audience" as const, label: "Público", values: terms.audiences },
+    { kind: "brand" as const, label: "Marcas", values: catalogBrands(catalogProducts) },
+  ];
+
+  function changeBenefits(index: number, items: BenefitItem[]) {
+    changeSection(index, { benefits: { items } });
+  }
+
+  function benefitsEditor(section: DraftSection, index: number) {
+    const items = section.benefits?.items || [];
+    const update = (itemIndex: number, changes: Partial<BenefitItem>) =>
+      changeBenefits(index, items.map((item, other) => other === itemIndex ? { ...item, ...changes } : item));
+    return <div className="flex flex-col gap-4 bg-soft p-4">
+      <ol className="m-0 flex list-none flex-col gap-3 p-0">
+        {items.map((item, itemIndex) => <li className="flex flex-col gap-3 border border-line bg-white p-3" key={itemIndex}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2 font-mono text-xs text-graphite"><BenefitIcon className="size-5 text-ink" icon={item.icon} />Beneficio {String(itemIndex + 1).padStart(2, "0")}</span>
+            <span className="flex gap-1.5">
+              <IconButton disabled={itemIndex === 0} icon="up" label="Mover antes" onClick={() => {
+                const next = [...items]; [next[itemIndex - 1], next[itemIndex]] = [next[itemIndex], next[itemIndex - 1]]; changeBenefits(index, next);
+              }} />
+              <IconButton disabled={itemIndex === items.length - 1} icon="down" label="Mover después" onClick={() => {
+                const next = [...items]; [next[itemIndex + 1], next[itemIndex]] = [next[itemIndex], next[itemIndex + 1]]; changeBenefits(index, next);
+              }} />
+              <IconButton icon="delete" label="Quitar beneficio" onClick={() => changeBenefits(index, items.filter((_, other) => other !== itemIndex))} tone="danger" />
+            </span>
+          </div>
+          <div aria-label="Ícono" className="flex flex-wrap gap-1.5" role="radiogroup">
+            {benefitIconOptions.map((option) => <button aria-checked={item.icon === option.key} aria-label={option.label} key={option.key} role="radio" title={option.label}
+              className={`inline-flex size-10 items-center justify-center border ${item.icon === option.key ? "border-ink bg-ink text-white" : "border-line bg-white hover:border-ink"}`}
+              onClick={() => update(itemIndex, { icon: option.key })} type="button"><BenefitIcon className="size-5" icon={option.key} /></button>)}
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_2fr]">
+            <label className={ui.label}>Título
+              <input className={ui.input} maxLength={80} onChange={(event) => update(itemIndex, { title: event.target.value })} value={item.title} />
+            </label>
+            <label className={ui.label}>Texto
+              <input className={ui.input} maxLength={240} onChange={(event) => update(itemIndex, { text: event.target.value })} value={item.text} />
+            </label>
+          </div>
+        </li>)}
+      </ol>
+      <button className={`${ui.secondary} self-start`} disabled={items.length >= 6}
+        onClick={() => changeBenefits(index, [...items, { icon: "star", title: "", text: "" }])} type="button">+ Agregar beneficio</button>
+    </div>;
+  }
+
+  function categoriesEditor(section: DraftSection, index: number) {
+    const config = section.categories || { layout: "cards" as const, columns: 2, tiles: [] };
+    const segment = (selected: boolean) => `h-10 flex-1 px-3 text-[13px] font-medium ${selected ? "bg-ink text-white" : "bg-white hover:bg-soft"}`;
+    return <div className="flex flex-col gap-4 bg-soft p-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className={ui.label}>Diseño
+          <div className="flex border border-ink" role="radiogroup" aria-label="Diseño de los bloques">
+            {([["cards", "Tarjetas"], ["panels", "Paneles"]] as const).map(([value, label]) =>
+              <button aria-checked={config.layout === value} className={segment(config.layout === value)} key={value} onClick={() => changeCategories(index, { layout: value })} role="radio" type="button">{label}</button>)}
+          </div>
+          <span className={ui.hint}>{config.layout === "cards" ? "Imagen 4:5 con el texto debajo." : "Imagen grande con el texto sobre la foto."}</span>
+        </div>
+        <div className={ui.label}>Columnas
+          <div className="flex border border-ink" role="radiogroup" aria-label="Columnas">
+            {[1, 2, 3].map((value) => <button aria-checked={config.columns === value} className={segment(config.columns === value)} key={value}
+              onClick={() => changeCategories(index, { columns: value })} role="radio" type="button">{value}</button>)}
+          </div>
+          <span className={ui.hint}>En celulares los bloques se apilan.</span>
+        </div>
+      </div>
+      <ol className="m-0 flex list-none flex-col gap-3 p-0">
+        {config.tiles.map((tile, tileIndex) => {
+          const image = section.media.find((item) => item.id === tile.mediaId);
+          const usedElsewhere = new Set(config.tiles.filter((_, other) => other !== tileIndex).map((other) => other.mediaId));
+          return <li className="grid gap-4 border border-line bg-white p-3 sm:grid-cols-[120px_1fr]" key={tileIndex}>
+            <div className="relative aspect-[4/5] w-full overflow-hidden bg-mist sm:w-[120px]">
+              {image && image.url && !image.removed ? <MediaImage alt={image.altText} className="absolute inset-0 h-full w-full object-cover" height={150} sizes="120px" src={image.url} width={120} /> :
+                <span className="absolute inset-0 flex items-center justify-center p-2 text-center font-mono text-[10px] uppercase tracking-[0.08em] text-graphite">{image?.removed ? "Imagen eliminada" : "Sin imagen"}</span>}
+            </div>
+            <div className="flex min-w-0 flex-col gap-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-xs text-graphite">Bloque {String(tileIndex + 1).padStart(2, "0")}</span>
+                <span className="flex gap-1.5">
+                  <IconButton disabled={tileIndex === 0} icon="up" label="Mover antes" onClick={() => {
+                    const tiles = [...config.tiles]; [tiles[tileIndex - 1], tiles[tileIndex]] = [tiles[tileIndex], tiles[tileIndex - 1]]; changeCategories(index, { tiles });
+                  }} />
+                  <IconButton disabled={tileIndex === config.tiles.length - 1} icon="down" label="Mover después" onClick={() => {
+                    const tiles = [...config.tiles]; [tiles[tileIndex + 1], tiles[tileIndex]] = [tiles[tileIndex], tiles[tileIndex + 1]]; changeCategories(index, { tiles });
+                  }} />
+                  <IconButton icon="delete" label="Quitar bloque" onClick={() => changeCategories(index, { tiles: config.tiles.filter((_, other) => other !== tileIndex) })} tone="danger" />
+                </span>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className={ui.label}>Texto
+                  <input className={ui.input} maxLength={120} onChange={(event) => changeTile(index, tileIndex, { title: event.target.value })} placeholder="Mujer, Deportivo…" value={tile.title} />
+                </label>
+                <label className={ui.label}>Enlace
+                  <select className={ui.input} onChange={(event) => {
+                    const [kind, ...value] = event.target.value.split(":");
+                    changeTile(index, tileIndex, { linkKind: (kind || "") as CategoryTile["linkKind"], linkValue: value.join(":") });
+                  }} value={tile.linkKind ? `${tile.linkKind}:${tile.linkValue}` : ""}>
+                    <option value="">Sin enlace</option>
+                    {linkGroups.map((group) => group.values.length > 0 && <optgroup key={group.kind} label={group.label}>
+                      {group.values.map((value) => <option key={value} value={`${group.kind}:${value}`}>{titleCase(value)}</option>)}
+                    </optgroup>)}
+                    {tile.linkKind && !linkGroups.find((group) => group.kind === tile.linkKind)?.values.includes(tile.linkValue) &&
+                      <option value={`${tile.linkKind}:${tile.linkValue}`}>{tile.linkValue} (sin productos publicados)</option>}
+                  </select>
+                </label>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <FileField accept="image/jpeg,image/png,image/webp" disabled={busy} hint="PNG, JPEG o WebP de hasta 8 MiB"
+                  label={tile.mediaId ? "Reemplazar imagen" : "Subir imagen"} onFile={(file) => { if (file) void uploadTileImage(index, tileIndex, file); }} />
+                <select aria-label="Elegir imagen del banco" className={`${ui.input} h-auto min-h-11`} onChange={(event) => changeTile(index, tileIndex, { mediaId: Number(event.target.value) })}
+                  value={tile.mediaId && library.some((item) => item.id === tile.mediaId) ? tile.mediaId : 0}>
+                  <option value={0}>{tile.mediaId ? "Quitar imagen" : "O elegir del banco…"}</option>
+                  {library.filter((item) => !item.isDeleted && item.purpose !== "qr" && (!usedElsewhere.has(item.id) || item.id === tile.mediaId)).map((item) =>
+                    <option key={item.id} value={item.id}>{item.altText || `Imagen ${item.id}`}</option>)}
+                </select>
+              </div>
+            </div>
+          </li>;
+        })}
+      </ol>
+      <button className={`${ui.secondary} self-start`} disabled={config.tiles.length >= 12} onClick={() => changeCategories(index, { tiles: [...config.tiles, blankTile()] })} type="button">+ Agregar bloque</button>
+    </div>;
   }
 
   const tabs = [
@@ -317,12 +496,14 @@ export default function LandingEditor() {
                 </span>
                 <span className="truncate text-[15px] font-semibold">{section.title || "Sin título"}</span>
               </button>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <button aria-label="Subir sección" className={ui.quiet} disabled={index === 0} onClick={() => moveSection(index, -1)} type="button">↑</button>
-                <button aria-label="Bajar sección" className={ui.quiet} disabled={index === draft.sections.length - 1} onClick={() => moveSection(index, 1)} type="button">↓</button>
-                <button className={ui.quiet} onClick={() => changeSection(index, { isVisible: !section.isVisible })} type="button">{section.isVisible ? "Ocultar" : "Mostrar"}</button>
-                <button className={ui.quiet} onClick={() => void toggleSectionTrash(index)} type="button">{section.isDeleted ? "Restaurar" : "Eliminar"}</button>
-                <button aria-label={open ? "Contraer" : "Editar"} className={ui.quiet} onClick={() => setExpanded((current) => ({ ...current, [section.key]: !open }))} type="button">{open ? "−" : "Editar"}</button>
+              <div className="flex items-center gap-1.5">
+                <IconButton disabled={index === 0} icon="up" label="Subir sección" onClick={() => moveSection(index, -1)} />
+                <IconButton disabled={index === draft.sections.length - 1} icon="down" label="Bajar sección" onClick={() => moveSection(index, 1)} />
+                <IconButton icon={section.isVisible ? "show" : "hide"} label={section.isVisible ? "Visible: pulsa para ocultar" : "Oculta: pulsa para mostrar"}
+                  onClick={() => changeSection(index, { isVisible: !section.isVisible })} pressed={!section.isVisible} />
+                {section.isDeleted ? <IconButton icon="restore" label="Restaurar sección" onClick={() => void toggleSectionTrash(index)} /> :
+                  <IconButton icon="delete" label="Eliminar sección" onClick={() => void toggleSectionTrash(index)} tone="danger" />}
+                <IconButton icon={open ? "close" : "edit"} label={open ? "Cerrar edición" : "Editar sección"} onClick={() => setExpanded((current) => ({ ...current, [section.key]: !open }))} pressed={open} />
               </div>
             </div>
             {open && <div className="flex flex-col gap-5 border-t border-line p-4 sm:p-5">
@@ -364,7 +545,9 @@ export default function LandingEditor() {
                 Los productos de esta sección se eligen marcando «Destacado» en cada ficha. Sus precios e imágenes se leen del catálogo activo.
                 <Link className="ml-1 underline" href="/admin/catalogo/productos">Abrir productos</Link>
               </p>}
-              <div className="flex flex-col gap-3">
+              {section.type === "categories" && categoriesEditor(section, index)}
+              {section.type === "benefits" && benefitsEditor(section, index)}
+              {section.type !== "categories" && section.type !== "benefits" && <div className="flex flex-col gap-3">
                 <div className="flex items-baseline justify-between"><p className="m-0 text-sm font-semibold">Imágenes</p>
                   <span className="font-mono text-xs text-graphite">{section.media.length} / 12</span></div>
                 {section.media.length > 0 && <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
@@ -387,14 +570,8 @@ export default function LandingEditor() {
                         onChange={(event) => setAltTexts((current) => ({ ...current, [section.key]: event.target.value }))}
                         placeholder="Describe la imagen" value={altTexts[section.key] || ""} />
                     </label>
-                    <label className={ui.label}>Subir PNG, JPEG o WebP
-                      <input accept="image/jpeg,image/png,image/webp" className={ui.file} disabled={busy}
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (file) void uploadImage(index, file);
-                          event.target.value = "";
-                        }} type="file" />
-                    </label>
+                    <FileField accept="image/jpeg,image/png,image/webp" disabled={busy || section.media.length >= 12} hint="PNG, JPEG o WebP de hasta 8 MiB"
+                      label="Subir imagen" onFile={(file) => { if (file) void uploadImage(index, file); }} />
                   </div>
                   <div className="flex flex-col gap-3">
                     <label className={ui.label}>O elegir del banco de imágenes
@@ -415,7 +592,7 @@ export default function LandingEditor() {
                       }} type="button">Agregar imagen</button>
                   </div>
                 </div>
-              </div>
+              </div>}
             </div>}
           </li>;
         })}
@@ -457,7 +634,7 @@ export default function LandingEditor() {
         )}
       </section>}
 
-      <div className="sticky bottom-20 z-30 flex flex-wrap items-center gap-3 border border-line bg-white p-4 shadow-lg lg:bottom-4">
+      <div className="sticky bottom-[calc(1rem+env(safe-area-inset-bottom))] z-30 flex flex-wrap items-center gap-3 border border-line bg-white p-3 shadow-lg sm:p-4 lg:bottom-4">
         <button className={ui.secondary} disabled={busy || !dirty} onClick={() => void saveClick()} type="button">Guardar borrador</button>
         <button className={ui.primary} disabled={busy} onClick={() => void publish()} type="button">Publicar</button>
         <button className={`${ui.link} hidden sm:inline`} onClick={() => setTab("preview")} type="button">Ver vista previa</button>

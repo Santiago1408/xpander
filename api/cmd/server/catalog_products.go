@@ -20,6 +20,8 @@ type productVariant struct {
 	CompareAtPriceMinor *int64 `json:"compareAtPriceMinor"`
 	IsActive            bool   `json:"isActive"`
 	IsDeleted           bool   `json:"isDeleted"`
+	// Public only: active branches holding at least one unit (never the quantity).
+	AvailableBranchIDs []int64 `json:"availableBranchIds,omitempty"`
 }
 
 type productRecord struct {
@@ -169,6 +171,11 @@ func readProducts(ctx context.Context, pool *pgxpool.Pool, public bool) ([]produ
 	if err != nil {
 		return nil, err
 	}
+	if public {
+		if err := attachAvailability(ctx, tx, products, indexes); err != nil {
+			return nil, err
+		}
+	}
 	query = `SELECT pm.product_id, m.id, m.kind, COALESCE(m.alt_text,'')
 		FROM product_media pm JOIN media m ON m.id=pm.media_id
 		WHERE pm.product_id=ANY($1) AND m.kind='image' AND m.source_type='local'`
@@ -310,4 +317,35 @@ func (service *productService) changeVariantTrash(w http.ResponseWriter, r *http
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func attachAvailability(ctx context.Context, tx pgx.Tx, products []productRecord, indexes map[int64]int) error {
+	variantIDs := []int64{}
+	where := map[int64][2]int{}
+	for _, product := range products {
+		for position, variant := range product.Variants {
+			variantIDs = append(variantIDs, variant.ID)
+			where[variant.ID] = [2]int{indexes[product.ID], position}
+		}
+	}
+	if len(variantIDs) == 0 {
+		return nil
+	}
+	rows, err := tx.Query(ctx, `SELECT s.variant_id, s.branch_id FROM branch_stock s
+		JOIN branches b ON b.id=s.branch_id AND b.is_active
+		WHERE s.variant_id=ANY($1) AND s.quantity > 0 ORDER BY s.branch_id`, variantIDs)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var variantID, branchID int64
+		if err := rows.Scan(&variantID, &branchID); err != nil {
+			return err
+		}
+		position := where[variantID]
+		variant := &products[position[0]].Variants[position[1]]
+		variant.AvailableBranchIDs = append(variant.AvailableBranchIDs, branchID)
+	}
+	return rows.Err()
 }

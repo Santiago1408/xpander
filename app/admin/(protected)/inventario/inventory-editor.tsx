@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Card, EmptyState, Feedback, Pill, formatDate, ui } from "../../admin-ui";
+import { Card, ChipRow, EmptyState, Feedback, Pill, formatDate, ui } from "../../admin-ui";
 
 type Branch = { id: number; name: string };
 type Variant = { id: number; label: string };
@@ -108,7 +108,7 @@ export default function InventoryEditor() {
           <span className="text-[13px] text-graphite">{label}</span><span className="font-mono text-2xl">{data ? value : "—"}</span>
         </div>)}
     </div>
-    <div className="grid items-start gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
+    <div className="grid items-start grid-cols-1 gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
       <form className={`${ui.card} ${ui.cardPad} flex flex-col gap-4 xl:sticky xl:top-6`} onSubmit={(event) => void submit(event)}>
         <div>
           <h2 className={ui.cardTitle}>Registrar movimiento</h2>
@@ -150,8 +150,8 @@ export default function InventoryEditor() {
 
       <div className="flex min-w-0 flex-col gap-4">
         <Card padded={false} title="Existencias por sucursal" actions={<>
-          <input aria-label="Buscar en existencias" className={`${ui.input} h-9 w-48`} onChange={(event) => setStockQuery(event.target.value)} placeholder="Buscar producto o código" type="search" value={stockQuery} />
-          {(data?.branches.length || 0) > 1 && <select aria-label="Filtrar por sucursal" className={`${ui.input} h-9 w-auto`} onChange={(event) => setStockBranch(Number(event.target.value))} value={stockBranch}>
+          <input aria-label="Buscar en existencias" className={`${ui.input} h-10 w-full sm:h-9 sm:w-48`} onChange={(event) => setStockQuery(event.target.value)} placeholder="Buscar producto o código" type="search" value={stockQuery} />
+          {(data?.branches.length || 0) > 1 && <select aria-label="Filtrar por sucursal" className={`${ui.input} h-10 w-full sm:h-9 sm:w-auto`} onChange={(event) => setStockBranch(Number(event.target.value))} value={stockBranch}>
             <option value={0}>Todas las sucursales</option>
             {data?.branches.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>}
@@ -167,12 +167,22 @@ export default function InventoryEditor() {
             </table></div>}
         </Card>
         <Card padded={false} title="Últimos movimientos" description="Los 100 más recientes. Cada fila es inmutable." actions={
-          <div aria-label="Filtrar movimientos" className="flex flex-wrap gap-1.5" role="group">
+          <ChipRow label="Filtrar movimientos">
             {[["all", "Todos"], ["purchase", "Entradas"], ["adjustment", "Ajustes"], ["sale", "Ventas"]].map(([value, label]) =>
-              <button aria-pressed={movementKind === value} className={ui.chip(movementKind === value)} key={value} onClick={() => setMovementKind(value)} type="button">{label}</button>)}
-          </div>}>
+              <button aria-pressed={movementKind === value} className={`${ui.chip(movementKind === value)} shrink-0`} key={value} onClick={() => setMovementKind(value)} type="button">{label}</button>)}
+          </ChipRow>}>
           {!data ? <p className="p-6 text-sm text-graphite">Cargando…</p> : movements.length === 0 ? <p className="p-6 text-sm text-graphite">Todavía no hay movimientos.</p> :
-            <div className="overflow-x-auto"><table className="w-full min-w-[720px] border-collapse text-sm">
+            <><ul className="m-0 list-none p-0 md:hidden">{movements.map((item) => <li className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-t border-mist px-5 py-3.5 first:border-0" key={item.id}>
+              <span className="text-sm">{item.variantLabel}</span>
+              <span className={`text-right font-mono text-sm ${item.delta < 0 ? "" : "font-semibold"}`}>{item.delta > 0 ? "+" : ""}{item.delta}</span>
+              <span className="flex flex-wrap items-center gap-2 text-xs text-graphite">
+                <Pill tone={item.kind === "purchase" ? "outline" : item.kind === "sale" ? "solid" : "dashed"}>{kindLabel[item.kind] || item.kind}</Pill>
+                {item.branchName} · {formatDate(item.createdAt)}{item.recordedBy && ` · ${item.recordedBy}`}
+              </span>
+              <span className="text-right font-mono text-xs text-graphite">{item.unitCostMinor === null ? "" : `Bs ${formatBOB(item.unitCostMinor)}/u.`}</span>
+              {item.note && <span className="col-span-2 text-xs text-graphite">{item.note}</span>}
+            </li>)}</ul>
+            <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[720px] border-collapse text-sm">
               <thead><tr><th className={ui.th}>Fecha</th><th className={ui.th}>Sucursal y variante</th><th className={ui.th}>Tipo</th>
                 <th className={`${ui.th} text-right`}>Unidades</th><th className={`${ui.th} text-right`}>Costo/u.</th><th className={ui.th}>Responsable</th></tr></thead>
               <tbody>{movements.map((item) => <tr className="hover:bg-soft" key={item.id}>
@@ -183,7 +193,7 @@ export default function InventoryEditor() {
                 <td className={`${ui.td} text-right font-mono`}>{item.unitCostMinor === null ? "—" : `Bs ${formatBOB(item.unitCostMinor)}`}</td>
                 <td className={`${ui.td} text-graphite`}>{item.recordedBy || "—"}</td>
               </tr>)}</tbody>
-            </table></div>}
+            </table></div></>}
         </Card>
       </div>
     </div>

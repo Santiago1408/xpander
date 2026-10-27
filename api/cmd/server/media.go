@@ -12,10 +12,12 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -103,7 +105,8 @@ func (service *landingService) uploadMedia(w http.ResponseWriter, r *http.Reques
 	}
 	processed, err := processUploadedImage(r.Context(), service.mediaDir, data, purpose)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) ||
+			errors.Is(err, os.ErrPermission) || errors.Is(err, syscall.ENOSPC) {
 			serverError(w, "process uploaded image", err)
 		} else {
 			slog.Warn("image upload rejected", "error", err)

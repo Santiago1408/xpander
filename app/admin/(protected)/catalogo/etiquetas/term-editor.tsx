@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Feedback, Modal, ui } from "../../../admin-ui";
+import { Feedback, IconButton, Modal, ui } from "../../../admin-ui";
 
 type Kind = "style" | "audience";
 type Term = { id: number; kind: Kind; name: string; productCount: number };
@@ -75,7 +75,7 @@ export default function TermEditor() {
   return <div className="flex flex-col gap-4">
     <form className={`${ui.card} ${ui.cardPad} flex flex-col gap-3`} onSubmit={(event) => void save(event)}>
       <h2 className={ui.cardTitle}>{editing ? `Modificar «${editing.name}»` : "Nuevo estilo o público"}</h2>
-      <div className="grid gap-3 sm:grid-cols-[200px_1fr_auto] sm:items-end">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[200px_1fr_auto] sm:items-end">
         <label className={ui.label}>Tipo *
           <select className={ui.input} disabled={busy || !!editing} onChange={(event) => setKind(event.target.value as Kind)} value={kind}>
             {kinds.map((item) => <option key={item.value} value={item.value}>{item.title}</option>)}
@@ -101,8 +101,8 @@ export default function TermEditor() {
             <ul className="m-0 list-none p-0">{items.map((term) => <li className={`flex items-center gap-3 border-t border-mist px-5 py-3 first:border-0 sm:px-6 ${editing?.id === term.id ? "bg-soft" : ""}`} key={term.id}>
               <span className="mr-auto flex flex-col"><span className="text-sm font-medium">{term.name}</span>
                 <span className="font-mono text-[11px] text-graphite">{term.productCount} producto(s)</span></span>
-              <button className={ui.quiet} disabled={busy} onClick={() => { setEditing(term); setKind(term.kind); setName(term.name); setError(""); }} type="button">Editar</button>
-              <button className={ui.dangerLink} disabled={busy} onClick={() => setDeleting(term)} type="button">Eliminar</button>
+              <IconButton disabled={busy} icon="edit" label={`Editar ${term.name}`} onClick={() => { setEditing(term); setKind(term.kind); setName(term.name); setError(""); }} />
+              <IconButton disabled={busy} icon="delete" label={`Eliminar ${term.name}`} onClick={() => setDeleting(term)} tone="danger" />
             </li>)}</ul>}
         </section>;
       })}

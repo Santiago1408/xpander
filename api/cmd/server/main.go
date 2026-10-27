@@ -71,6 +71,7 @@ func run() error {
 	registerBrandRoutes(mux, pool, admin)
 	registerTermRoutes(mux, pool, admin)
 	registerBranchRoutes(mux, pool, admin)
+	registerAccountRoutes(mux, pool, admin)
 	registerProductRoutes(mux, pool, admin)
 	registerQuickCatalogRoutes(mux, pool, admin)
 	registerTrashRoutes(mux, pool, admin, mediaDir)

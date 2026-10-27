@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { notify } from "../../toast";
 
 export default function LogoutButton({ className = "" }: { className?: string }) {
   const router = useRouter();
@@ -22,7 +23,7 @@ export default function LogoutButton({ className = "" }: { className?: string })
       router.refresh();
     } catch {
       setPending(false);
-      window.alert("No se pudo cerrar la sesión. Inténtalo de nuevo.");
+      notify.error("No se pudo cerrar la sesión. Inténtalo de nuevo.");
     }
   }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import TrashActions, { ConfirmPurge, trashKindLabel, type TrashRef } from "./trash-actions";
-import { EmptyState, Feedback, Pill, formatDate, ui } from "../../admin-ui";
+import { ChipRow, EmptyState, Feedback, Pill, formatDate, ui } from "../../admin-ui";
 
 type TrashItem = TrashRef & { deletedAt: string };
 
@@ -67,12 +67,12 @@ export default function TrashList() {
       <Feedback error={error} notice={notice} />
       <section className={ui.card}>
         <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
-          <div aria-label="Filtrar por tipo" className="flex flex-wrap gap-1.5" role="group">
-            {["all", "product", "variant", "media", "section"].map((value) => <button aria-pressed={kind === value} className={ui.chip(kind === value)} key={value}
+          <ChipRow className="w-full sm:w-auto" label="Filtrar por tipo">
+            {["all", "product", "variant", "media", "section"].map((value) => <button aria-pressed={kind === value} className={`${ui.chip(kind === value)} shrink-0`} key={value}
               onClick={() => setKind(value)} type="button">{value === "all" ? "Todo" : trashKindLabel[value]}
               <span className="font-mono text-[11px] opacity-70">{(items || []).filter((item) => value === "all" || item.kind === value).length}</span></button>)}
-          </div>
-          <button className={`${ui.secondary} ml-auto border-red-700 text-red-700 hover:bg-red-700 hover:text-white`}
+          </ChipRow>
+          <button className={`${ui.secondary} w-full border-red-700 text-red-700 hover:bg-red-700 hover:text-white sm:ml-auto sm:w-auto`}
             disabled={busy || !items?.length} onClick={() => setConfirmAll(true)} type="button">Vaciar papelera</button>
         </div>
         {!items ? <p className="p-6 text-sm text-graphite">Cargando…</p> : items.length === 0 ? <div className="p-6"><EmptyState>La papelera está vacía.</EmptyState></div> :

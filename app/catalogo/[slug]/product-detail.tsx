@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 import { addToStoredCart, openCart } from "../../cart-store";
+import { notify } from "../../toast";
 import MediaImage from "../../media-image";
 import { BrandPlaceholder } from "../../product-card";
-import { colorSwatch, formatBOB, hasPriceRange, lowestPrice, productHref, sizeLabel, titleCase } from "../../shop-format";
+import { colorSwatch, formatBOB, hasPriceRange, lowestPrice, productHref, productInStock, sizeLabel, titleCase, variantInStock } from "../../shop-format";
 import type { CatalogProduct } from "../catalog-shop";
 
 function Accordion({ title, children, open: initiallyOpen = false }: { title: string; children: ReactNode; open?: boolean }) {
@@ -23,9 +24,10 @@ export default function ProductDetail({ product, siblings, knownVariantIds, qrAv
   product: CatalogProduct; siblings: CatalogProduct[]; knownVariantIds: number[]; qrAvailable: boolean;
 }) {
   const [imageIndex, setImageIndex] = useState(0);
-  const [variantId, setVariantId] = useState(product.variants.length === 1 ? product.variants[0].id : 0);
+  const inStockVariants = product.variants.filter((item) => variantInStock(item));
+  const [variantId, setVariantId] = useState(product.variants.length === 1 && inStockVariants.length === 1 ? product.variants[0].id : 0);
+  const soldOut = !productInStock(product);
   const [quantity, setQuantity] = useState(1);
-  const [added, setAdded] = useState("");
   const [error, setError] = useState("");
   const known = useMemo(() => new Set(knownVariantIds), [knownVariantIds]);
   const variant = product.variants.find((item) => item.id === variantId);
@@ -35,11 +37,13 @@ export default function ProductDetail({ product, siblings, knownVariantIds, qrAv
   const colors = [product, ...siblings].sort((a, b) => a.color.localeCompare(b.color, "es-BO"));
 
   function add() {
-    setError(""); setAdded("");
+    setError("");
     if (!variant) { setError("Elige una talla para continuar."); return; }
+    if (!variantInStock(variant)) { setError("Esta talla no tiene existencias."); return; }
     const result = addToStoredCart(variant.id, quantity, (id) => known.has(id));
-    if (!result.ok) { setError(result.reason); return; }
-    setAdded(`Añadido al carrito · Talla ${sizeLabel(variant)} · ${result.quantity} ${result.quantity === 1 ? "unidad" : "unidades"} en total`);
+    if (!result.ok) { setError(result.reason); notify.error(result.reason); return; }
+    const message = `Añadido al carrito · Talla ${sizeLabel(variant)} · ${result.quantity} ${result.quantity === 1 ? "unidad" : "unidades"} en total`;
+    notify.success(message, { label: "Ver carrito", onClick: openCart });
   }
 
   return (
@@ -55,7 +59,8 @@ export default function ProductDetail({ product, siblings, knownVariantIds, qrAv
         <div className="relative aspect-[4/5] w-full overflow-hidden bg-mist">
           {image ? <MediaImage alt={image.altText || product.name} className="absolute inset-0 h-full w-full object-cover" height={1500}
             loading="eager" sizes="(max-width: 1024px) 100vw, 60vw" src={image.url} width={1200} /> : <BrandPlaceholder />}
-          {product.isFeatured && <span className="absolute left-4 top-4 bg-white px-2 py-1 font-mono text-[11px] uppercase tracking-[0.08em]">Destacado</span>}
+          {soldOut ? <span className="absolute left-4 top-4 bg-ink px-2 py-1 font-mono text-[11px] uppercase tracking-[0.08em] text-white">Sin existencias</span> :
+            product.isFeatured && <span className="absolute left-4 top-4 bg-white px-2 py-1 font-mono text-[11px] uppercase tracking-[0.08em]">Destacado</span>}
           {product.media.length > 1 && <span className="absolute bottom-4 right-4 bg-white/90 px-2 py-1 font-mono text-xs">{imageIndex + 1} / {product.media.length}</span>}
         </div>
       </div>
@@ -88,11 +93,16 @@ export default function ProductDetail({ product, siblings, knownVariantIds, qrAv
           <div className="flex justify-between text-sm"><span className="font-semibold">Talla</span>
             {variant && <span className="font-mono text-xs text-graphite">Código {variant.code}</span>}</div>
           <div aria-label="Talla" className="grid grid-cols-[repeat(auto-fill,minmax(64px,1fr))] gap-1.5" role="group">
-            {product.variants.map((item) => <button aria-pressed={item.id === variantId}
-              className={`min-h-12 border px-2 font-mono text-[13px] ${item.id === variantId ? "border-ink bg-ink text-white" : "border-line bg-white hover:border-ink"}`}
-              key={item.id} onClick={() => { setVariantId(item.id); setError(""); setAdded(""); }} type="button">{sizeLabel(item)}</button>)}
+            {product.variants.map((item) => {
+              const available = variantInStock(item);
+              return <button aria-label={available ? `Talla ${sizeLabel(item)}` : `Talla ${sizeLabel(item)}, sin existencias`} aria-pressed={item.id === variantId}
+                className={`min-h-12 border px-2 font-mono text-[13px] disabled:cursor-not-allowed disabled:border-line disabled:bg-soft disabled:text-[#bdbdbd] disabled:line-through ${item.id === variantId ? "border-ink bg-ink text-white" : "border-line bg-white hover:border-ink"}`}
+                disabled={!available} key={item.id} onClick={() => { setVariantId(item.id); setError(""); }} type="button">{sizeLabel(item)}</button>;
+            })}
           </div>
-          <span className="text-[13px] text-graphite">La disponibilidad en tu sucursal se confirma al registrar el pedido.</span>
+          <span className="text-[13px] text-graphite">{soldOut ? "Este producto no tiene existencias por el momento." :
+            inStockVariants.length < product.variants.length ? `${product.variants.length - inStockVariants.length} talla(s) sin existencias. La disponibilidad en tu sucursal se confirma al registrar el pedido.` :
+            "La disponibilidad en tu sucursal se confirma al registrar el pedido."}</span>
         </div>
 
         <div className="flex gap-2.5">
@@ -103,15 +113,11 @@ export default function ProductDetail({ product, siblings, knownVariantIds, qrAv
             <button aria-label="Añadir una unidad" className="h-full w-12 text-lg disabled:text-line" disabled={quantity >= 20}
               onClick={() => setQuantity(quantity + 1)} type="button">+</button>
           </div>
-          <button className="xp-btn h-14 flex-1 bg-ink px-4 tracking-[0.08em] text-white hover:bg-[#333]" onClick={add} type="button">
-            {variant ? `Añadir al carrito · ${formatBOB(variant.priceMinor * quantity)}` : "Elige una talla"}
+          <button className="xp-btn h-14 flex-1 bg-ink px-4 tracking-[0.08em] text-white enabled:hover:bg-[#333] disabled:cursor-not-allowed disabled:bg-[#bdbdbd]" disabled={soldOut} onClick={add} type="button">
+            {soldOut ? "Sin existencias" : variant ? `Añadir al carrito · ${formatBOB(variant.priceMinor * quantity)}` : "Elige una talla"}
           </button>
         </div>
         {error && <p className="m-0 -mt-3 text-sm text-red-700" role="alert">{error}</p>}
-        {added && <div className="-mt-3 flex flex-wrap items-center justify-between gap-4 bg-soft p-4 text-sm" role="status">
-          <span>{added}</span>
-          <button className="font-semibold underline underline-offset-4" onClick={openCart} type="button">Ver carrito →</button>
-        </div>}
 
         <div className="grid grid-cols-3 gap-px border border-line bg-line text-center text-xs">
           <div className="flex flex-col gap-1 bg-white px-2 py-3.5"><span className="font-semibold">Recojo o envío</span><span className="text-graphite">Envío por WhatsApp</span></div>

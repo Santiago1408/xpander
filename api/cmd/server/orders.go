@@ -90,6 +90,7 @@ func registerOrderRoutes(mux *http.ServeMux, pool *pgxpool.Pool, admin *adminAut
 	mux.HandleFunc("GET /api/admin/orders", service.listAdmin)
 	mux.HandleFunc("POST /api/admin/orders/{id}/confirm", service.confirm)
 	mux.HandleFunc("POST /api/admin/orders/{id}/cancel", service.cancel)
+	mux.HandleFunc("POST /api/admin/sales", service.createSale)
 	mux.HandleFunc("POST /api/orders/{id}/receipt", service.uploadPaymentProof)
 	mux.HandleFunc("GET /api/orders/{id}/payment", service.customerPaymentStatus)
 	mux.HandleFunc("GET /api/admin/orders/{id}/receipt", service.downloadPaymentProof)

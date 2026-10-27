@@ -2,7 +2,7 @@ import Link from "next/link";
 import MediaImage from "./media-image";
 import QuickAdd from "./quick-add";
 import type { CatalogProduct } from "./catalogo/catalog-shop";
-import { discountPercent, formatBOB, hasPriceRange, productHref, titleCase } from "./shop-format";
+import { discountPercent, formatBOB, hasPriceRange, productHref, productInStock, titleCase } from "./shop-format";
 
 export function BrandPlaceholder({ className = "" }: { className?: string }) {
   return <div aria-hidden="true" className={`absolute inset-0 flex items-center justify-center ${className}`}>
@@ -28,17 +28,18 @@ export default function ProductCard({ product, sizes = "(max-width: 640px) 50vw,
   const [image, hover] = product.media;
   const lead = leadVariant(product);
   const discount = discountPercent(product);
-  const tag = discount > 0 ? `−${discount}%` : product.isFeatured ? "Destacado" : "";
+  const inStock = productInStock(product);
+  const tag = !inStock ? "Sin existencias" : discount > 0 ? `−${discount}%` : product.isFeatured ? "Destacado" : "";
   return (
     <div className="xp-card group relative" id={`producto-${product.id}`}>
     <Link className="flex flex-col gap-3.5 text-ink" href={productHref(product)}>
-      <div className="relative aspect-[3/4] overflow-hidden bg-mist">
+      <div className={`relative aspect-[3/4] overflow-hidden bg-mist ${inStock ? "" : "opacity-60 grayscale"}`}>
         {image ? <MediaImage alt={image.altText || product.name} className="absolute inset-0 h-full w-full object-cover"
           height={1067} sizes={sizes} src={image.url} width={800} /> : <BrandPlaceholder />}
         {hover && <div className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
           <MediaImage alt="" className="absolute inset-0 h-full w-full object-cover" height={1067} sizes={sizes} src={hover.url} width={800} />
         </div>}
-        {tag && <span className="absolute left-3 top-3 bg-white px-2 py-1 font-mono text-[11px] uppercase tracking-[0.08em]">{tag}</span>}
+        {tag && <span className={`absolute left-3 top-3 px-2 py-1 font-mono text-[11px] uppercase tracking-[0.08em] ${inStock ? "bg-white" : "bg-ink text-white"}`}>{tag}</span>}
       </div>
       <div className="flex items-baseline justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
@@ -52,7 +53,7 @@ export default function ProductCard({ product, sizes = "(max-width: 640px) 50vw,
         </div>
       </div>
     </Link>
-    <QuickAdd product={product} />
+    {inStock && <QuickAdd product={product} />}
     </div>
   );
 }

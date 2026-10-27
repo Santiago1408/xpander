@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Feedback, Modal, ui } from "../../../admin-ui";
+import { Feedback, IconButton, Modal, ui } from "../../../admin-ui";
 
 type Brand = { id: number; name: string; productCount: number };
 
@@ -82,8 +82,8 @@ export default function BrandEditor() {
       <ul className="m-0 list-none p-0">{brands.map((brand) => <li className={`flex items-center gap-3 border-t border-mist px-5 py-3 sm:px-6 ${editing?.id === brand.id ? "bg-soft" : ""}`} key={brand.id}>
         <span className="mr-auto flex flex-col"><span className="text-sm font-medium">{brand.name}</span>
           <span className="font-mono text-[11px] text-graphite">{brand.productCount} producto(s)</span></span>
-        <button className={ui.quiet} disabled={busy} onClick={() => { setEditing(brand); setName(brand.name); setError(""); }} type="button">Editar</button>
-        <button className={ui.dangerLink} disabled={busy} onClick={() => setDeleting(brand)} type="button">Eliminar</button>
+        <IconButton disabled={busy} icon="edit" label={`Editar ${brand.name}`} onClick={() => { setEditing(brand); setName(brand.name); setError(""); }} />
+        <IconButton disabled={busy} icon="delete" label={`Eliminar ${brand.name}`} onClick={() => setDeleting(brand)} tone="danger" />
       </li>)}</ul>}
     {deleting && <Modal labelledBy="delete-brand-title" onClose={() => !busy && setDeleting(null)} title="Eliminar marca">
       <p className="mt-3 text-sm text-body">Se eliminará «{deleting.name}».</p>

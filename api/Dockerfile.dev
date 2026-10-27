@@ -1,6 +1,8 @@
 FROM golang:1.27-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends imagemagick \
+    && convert -size 1x1 xc:black webp:/tmp/xpander-webp-check.webp \
+    && rm /tmp/xpander-webp-check.webp \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

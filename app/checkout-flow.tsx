@@ -7,7 +7,8 @@ import { clearStoredCart, maxCartLines, maxLineQuantity, readStoredCart, writeSt
 import type { CatalogProduct } from "./catalogo/catalog-shop";
 import MediaImage from "./media-image";
 import { BrandPlaceholder } from "./product-card";
-import { formatBOB, productHref, sizeLabel, titleCase } from "./shop-format";
+import { formatBOB, productHref, sizeLabel, titleCase, variantInStock } from "./shop-format";
+import { notify } from "./toast";
 
 type Branch = { id: number; name: string; address: string; instructions: string };
 type Receipt = { id: number; number: string; status: string; totalMinor: number; whatsappUrl: string;
@@ -61,6 +62,7 @@ export default function CheckoutFlow({ products, layout, onClose }: {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [pickupBranchId, setPickupBranchId] = useState(0);
   const [deliveryMethod, setDeliveryMethod] = useState<"pickup" | "delivery">("pickup");
+  const [paymentMethod, setPaymentMethod] = useState<"whatsapp" | "qr">("whatsapp");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerNote, setCustomerNote] = useState("");
@@ -138,7 +140,12 @@ export default function CheckoutFlow({ products, layout, onClose }: {
   const units = cart.reduce((sum, item) => sum + item.quantity, 0);
   const total = cartLines.reduce((sum, line) => sum + line.quantity * line.variant.priceMinor, 0);
   const qrAvailable = Boolean(business?.qrUrl);
-  const view = receipt ? (finished(receipt) || receipt.paymentStatus === "submitted" ? "whatsapp" : "payment") : step;
+  // The catalog reports which branches hold each size; the server rechecks quantities.
+  const soldOutLines = cartLines.filter((line) => !variantInStock(line.variant));
+  const missingAtBranch = (branchId: number) => cartLines.filter((line) => !variantInStock(line.variant, branchId));
+  const missingHere = pickupBranchId ? missingAtBranch(pickupBranchId) : [];
+  const view = receipt ? (receipt.paymentMethod === "whatsapp" || finished(receipt) ||
+    receipt.paymentStatus === "submitted" ? "whatsapp" : "payment") : step;
   const stepIndex = { cart: 0, details: 1, payment: 2, whatsapp: 3 }[view];
 
   function scrollTop() {
@@ -166,11 +173,11 @@ export default function CheckoutFlow({ products, layout, onClose }: {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy || cartLines.length === 0 || !pickupBranchId || !qrAvailable) return;
+    if (busy || cartLines.length === 0 || !pickupBranchId || (paymentMethod === "qr" && !qrAvailable)) return;
     setBusy(true); setError("");
     try {
       const data = {
-        pickupBranchId, paymentMethod: "qr", deliveryMethod, customerName: customerName.trim(),
+        pickupBranchId, paymentMethod, deliveryMethod, customerName: customerName.trim(),
         customerPhone: customerPhone.trim(), customerNote: customerNote.trim(), items: cartLines.map((line) => ({
           variantId: line.variantId, quantity: line.quantity, expectedUnitPriceMinor: line.variant.priceMinor,
         })),
@@ -188,11 +195,15 @@ export default function CheckoutFlow({ products, layout, onClose }: {
       setCart([]);
       pendingRequest.current = null;
       setReceipt(saved);
-      setSavedOrders(rememberQR(saved));
+      if (saved.paymentMethod === "qr") setSavedOrders(rememberQR(saved));
+      notify.success(saved.paymentMethod === "qr" ?
+        `Pedido ${saved.number} registrado. Ahora realiza el pago con el QR.` :
+        `Pedido ${saved.number} registrado. Envía el detalle por WhatsApp.`);
       setStep("cart");
       scrollTop();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "No se pudo registrar el pedido.");
+      const message = failure instanceof Error ? failure.message : "No se pudo registrar el pedido.";
+      setError(message); notify.error(message);
     } finally { setBusy(false); }
   }
 
@@ -212,7 +223,11 @@ export default function CheckoutFlow({ products, layout, onClose }: {
       setSavedOrders(rememberQR(updated));
       setProofFile(null);
       scrollTop();
-    } catch (failure) { setProofError(failure instanceof Error ? failure.message : "No se pudo subir el comprobante."); }
+      notify.success("Comprobante enviado. Último paso: envía el detalle por WhatsApp.");
+    } catch (failure) {
+      const message = failure instanceof Error ? failure.message : "No se pudo subir el comprobante.";
+      setProofError(message); notify.error(message);
+    }
     finally { setProofBusy(false); }
   }
 
@@ -227,7 +242,13 @@ export default function CheckoutFlow({ products, layout, onClose }: {
       const updated = { ...receipt, status: current.status, paymentStatus: current.paymentStatus };
       setReceipt(updated);
       setSavedOrders(finished(updated) ? rememberQR(null, receipt.id) : rememberQR(updated));
-    } catch (failure) { setProofError(failure instanceof Error ? failure.message : "No se pudo consultar el pago."); }
+      notify.info(updated.status === "confirmed" ? "Tu pedido está confirmado." : updated.status === "cancelled" ? "El pedido fue cancelado." :
+        updated.paymentStatus === "verified" ? "El negocio verificó tu pago." : updated.paymentStatus === "rejected" ? "El comprobante fue rechazado; puedes subir otro." :
+        updated.paymentStatus === "submitted" ? "Tu comprobante está en revisión." : "El pedido sigue esperando tu comprobante.");
+    } catch (failure) {
+      const message = failure instanceof Error ? failure.message : "No se pudo consultar el pago.";
+      setProofError(message); notify.error(message);
+    }
   }
 
   const drawer = layout === "drawer";
@@ -249,7 +270,7 @@ export default function CheckoutFlow({ products, layout, onClose }: {
       <div className="flex justify-between"><span>Entrega</span><span className="text-right text-graphite">{step === "details" && deliveryMethod === "delivery" ? "Envío: se cotiza por WhatsApp" : step === "details" ? "Recojo sin costo" : "Recojo o envío"}</span></div>
     </div>
     <div className="flex items-baseline justify-between border-t border-ink pt-4">
-      <span className="text-base font-semibold">Total a pagar</span><span className="font-mono text-2xl">{formatBOB(total)}</span>
+      <span className="text-base font-semibold">{paymentMethod === "qr" ? "Total a pagar" : "Total de productos"}</span><span className="font-mono text-2xl">{formatBOB(total)}</span>
     </div>
     {action}
   </div>;
@@ -277,6 +298,7 @@ export default function CheckoutFlow({ products, layout, onClose }: {
                   <Link className="text-[15px] font-semibold hover:underline" href={productHref(line.product)} onClick={onClose}>{titleCase(line.product.name)}</Link>
                   <p className="m-0 mt-0.5 text-[13px] text-graphite">{[line.product.color && titleCase(line.product.color), `Talla ${sizeLabel(line.variant)}`].filter(Boolean).join(" · ")}</p>
                   <p className="m-0 mt-0.5 font-mono text-[11px] text-graphite">{formatBOB(line.variant.priceMinor)} c/u</p>
+                  {!variantInStock(line.variant) && <p className="m-0 mt-1 text-xs font-semibold text-red-700">Sin existencias · quítalo para continuar</p>}
                 </div>
                 <span className="shrink-0 font-mono text-sm">{formatBOB(line.variant.priceMinor * line.quantity)}</span>
               </div>
@@ -295,11 +317,11 @@ export default function CheckoutFlow({ products, layout, onClose }: {
           </li>)}
         </ul>
         {summary(<>
-          {businessChecked && !qrAvailable && <p className="m-0 border-l-2 border-red-700 bg-white p-3 text-sm text-red-800" role="alert">
-            Por el momento no estamos recibiendo pagos en línea. Vuelve a intentarlo más tarde{business?.phone ? ` o escríbenos al ${business.phone}` : ""}.
+          {soldOutLines.length > 0 && <p className="m-0 border-l-2 border-red-700 bg-white p-3 text-sm text-red-800" role="alert">
+            {soldOutLines.length === 1 ? "Un producto de tu carrito ya no tiene existencias." : `${soldOutLines.length} productos de tu carrito ya no tienen existencias.`} Quítalos para finalizar la compra.
           </p>}
-          <button className={primary} disabled={!businessChecked || !qrAvailable} onClick={() => { setStep("details"); setError(""); scrollTop(); }} type="button">Finalizar compra</button>
-          <p className="m-0 text-xs leading-relaxed text-graphite">Pagas los productos con QR. El servidor confirma precios y disponibilidad al registrar el pedido.</p>
+          <button className={primary} disabled={soldOutLines.length > 0} onClick={() => { setStep("details"); setError(""); scrollTop(); }} type="button">Finalizar pedido</button>
+          <p className="m-0 text-xs leading-relaxed text-graphite">Podrás elegir entre coordinar por WhatsApp o pagar con QR. El servidor confirma precios y disponibilidad al registrar el pedido.</p>
         </>)}
       </>}
       {pendingPanel}
@@ -329,9 +351,24 @@ export default function CheckoutFlow({ products, layout, onClose }: {
           </label>)}
       </fieldset>
       <fieldset className="m-0 flex flex-col gap-2.5 border-0 p-0">
+        <legend className="mb-2.5 p-0 text-[15px] font-semibold">Cómo quieres continuar *</legend>
+        {([[
+          "whatsapp", "Coordinar por WhatsApp", "Registra el pedido y envía el detalle al negocio. No necesitas subir un comprobante.",
+        ], [
+          "qr", "Pagar con QR", "Transfiere los productos y sube tu comprobante; el negocio verificará el abono.",
+        ]] as const).map(([value, name, text]) =>
+          <label className={`${choice(paymentMethod === value)} ${value === "qr" && !qrAvailable ? "opacity-50" : ""}`} key={value}>
+            <input checked={paymentMethod === value} className="sr-only" disabled={busy || (value === "qr" && !qrAvailable)}
+              name="payment" onChange={() => setPaymentMethod(value)} type="radio" />
+            <span aria-hidden="true" className={dot(paymentMethod === value)} />
+            <span className="flex flex-col gap-1"><span className="text-[15px] font-semibold">{name}</span><span className="text-[13px] text-graphite">{text}</span></span>
+          </label>)}
+        {businessChecked && !qrAvailable && <p className="m-0 text-xs text-graphite">El QR no está disponible por ahora. Puedes continuar por WhatsApp.</p>}
+      </fieldset>
+      <fieldset className="m-0 flex flex-col gap-2.5 border-0 p-0">
         <legend className="mb-2.5 p-0 text-[15px] font-semibold">{deliveryMethod === "delivery" ? "Sucursal que despacha tu pedido *" : "Sucursal de recojo *"}</legend>
         {branchError && <p className="m-0 text-sm text-red-700">{branchError}</p>}
-        {branches.map((branch) => <label className={choice(branch.id === pickupBranchId)} key={branch.id}>
+        {branches.map((branch) => { const missing = missingAtBranch(branch.id).length; return <label className={choice(branch.id === pickupBranchId)} key={branch.id}>
           <input checked={branch.id === pickupBranchId} className="sr-only" disabled={busy} name="branch"
             onChange={() => setPickupBranchId(branch.id)} required type="radio" value={branch.id} />
           <span aria-hidden="true" className={dot(branch.id === pickupBranchId)} />
@@ -339,8 +376,12 @@ export default function CheckoutFlow({ products, layout, onClose }: {
             <span className="text-[15px] font-semibold">{branch.name}</span>
             {branch.address && <span className="text-[13px] text-graphite">{branch.address}</span>}
             {deliveryMethod === "pickup" && branch.instructions && <span className="text-[13px] text-graphite">{branch.instructions}</span>}
+            <span className={`text-xs font-medium ${missing ? "text-red-700" : "text-graphite"}`}>{missing ? `Sin existencias de ${missing} producto(s) de tu pedido` : "Tiene todos los productos de tu pedido"}</span>
           </span>
-        </label>)}
+        </label>; })}
+        {missingHere.length > 0 && <p className="m-0 border-l-2 border-red-700 bg-red-50 p-3 text-sm text-red-800" role="alert">
+          Esta sucursal no tiene {missingHere.map((line) => `${titleCase(line.product.name)} (${sizeLabel(line.variant)})`).join(", ")}. Elige otra sucursal o vuelve al carrito para quitarlos.
+        </p>}
       </fieldset>
       <label className="flex flex-col gap-1.5 text-[13px] font-medium">Indicaciones adicionales (opcional)
         <textarea className="w-full border border-line p-3.5 text-[15px] outline-none focus:border-ink" disabled={busy} maxLength={500}
@@ -349,8 +390,10 @@ export default function CheckoutFlow({ products, layout, onClose }: {
       </label>
       {error && <p className="m-0 border-l-2 border-red-700 bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p>}
       {summary(<>
-        <button className={primary} disabled={busy || !pickupBranchId || !qrAvailable} type="submit">{busy ? "Registrando…" : "Continuar con el pago"}</button>
-        <p className="m-0 text-xs leading-relaxed text-graphite">Al continuar se registra tu pedido y verás el QR para pagar. Desde ese momento el carrito ya no se puede modificar.</p>
+        <button className={primary} disabled={busy || !pickupBranchId || (paymentMethod === "qr" && !qrAvailable) || missingHere.length > 0} type="submit">
+          {busy ? "Registrando…" : paymentMethod === "qr" ? "Continuar con el pago" : "Registrar pedido"}
+        </button>
+        <p className="m-0 text-xs leading-relaxed text-graphite">Al continuar se registra tu pedido. Desde ese momento el carrito ya no se puede modificar.</p>
       </>)}
     </form>;
   } else if (view === "payment" && receipt) {
@@ -402,6 +445,7 @@ export default function CheckoutFlow({ products, layout, onClose }: {
   } else if (receipt) {
     const cancelled = receipt.status === "cancelled";
     const title = cancelled ? "Pedido cancelado" : receipt.status === "confirmed" ? "Pedido confirmado" :
+      receipt.paymentMethod === "whatsapp" ? "Pedido registrado" :
       receipt.paymentStatus === "verified" ? "Pago verificado" : "Comprobante recibido";
     content = <div className="flex flex-col gap-5">
       {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
@@ -411,15 +455,18 @@ export default function CheckoutFlow({ products, layout, onClose }: {
         <h2 className={heading}>{title}</h2>
       </div>
       <p className="m-0 text-[15px] leading-relaxed text-body">
-        {cancelled ? "El negocio canceló este pedido. Si ya realizaste un pago, escríbele por WhatsApp para resolverlo." :
-          receipt.status === "confirmed" ? "El negocio verificó tu pago y confirmó el pedido." :
+        {cancelled ? receipt.paymentMethod === "qr" ? "El negocio canceló este pedido. Si ya realizaste un pago, escríbele por WhatsApp para resolverlo." :
+          "El negocio canceló este pedido. Escríbele por WhatsApp si necesitas más información." :
+          receipt.status === "confirmed" ? receipt.paymentMethod === "qr" ? "El negocio verificó tu pago y confirmó el pedido." : "El negocio confirmó tu pedido." :
+          receipt.paymentMethod === "whatsapp" ? "Envía el detalle por WhatsApp para que el negocio coordine y confirme tu pedido." :
           receipt.paymentStatus === "verified" ? "El negocio verificó el abono en su banca y confirmará tu pedido." :
           "Último paso: envía el detalle de tu pedido por WhatsApp. El negocio verificará el abono en su banca y confirmará tu pedido."}
         {!cancelled && receipt.deliveryMethod === "delivery" && " Coordina allí la dirección y el costo del envío."}
       </p>
       <div className="flex flex-col gap-2.5 bg-soft p-5">
         <a className={primary} href={receipt.whatsappUrl} rel="noopener noreferrer" target="_blank">Enviar detalle por WhatsApp</a>
-        <p className="m-0 text-xs leading-relaxed text-graphite">Se abrirá WhatsApp con el mensaje listo; pulsa «Enviar» para que llegue. Tu comprobante ya quedó guardado en el sistema.</p>
+        <p className="m-0 text-xs leading-relaxed text-graphite">Se abrirá WhatsApp con el mensaje listo; pulsa «Enviar» para que llegue.
+          {receipt.paymentMethod === "qr" && " Tu comprobante ya quedó guardado en el sistema."}</p>
       </div>
       {proofError && <p className="m-0 text-sm text-red-700" role="alert">{proofError}</p>}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">

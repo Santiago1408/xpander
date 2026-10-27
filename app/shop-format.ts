@@ -98,3 +98,20 @@ export function colorSwatch(color: string): string | null {
   const name = plain(color);
   return swatches.find(([key]) => name.includes(key))?.[1] ?? null;
 }
+
+// The public catalog lists the active branches holding stock, never the quantity.
+export function variantInStock(variant: CatalogProduct["variants"][number], branchId?: number): boolean {
+  const branches = variant.availableBranchIds ?? [];
+  return branchId ? branches.includes(branchId) : branches.length > 0;
+}
+
+export function productInStock(product: CatalogProduct): boolean {
+  return product.variants.some((variant) => variantInStock(variant));
+}
+
+// wa.me link for a phone; 8-digit Bolivian mobile numbers get the 591 country code.
+export function whatsappHref(phone: string | undefined): string | null {
+  const digits = (phone || "").replace(/\D/g, "");
+  if (digits.length < 8) return null;
+  return `https://wa.me/${digits.length === 8 ? `591${digits}` : digits}`;
+}

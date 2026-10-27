@@ -1,5 +1,6 @@
 import Link from "next/link";
-import type { NavItem } from "./shop-format";
+import { whatsappHref, type NavItem } from "./shop-format";
+import SocialIcon from "./social-icons";
 import { socialPlatforms } from "./social-platforms";
 
 export function mapDestination(embedUrl: string): string {
@@ -27,13 +28,15 @@ export default function SiteFooter({ nav, socialLinks = {}, phone = "", mapEmbed
           </div>
           {socials.length > 0 && <div className="flex flex-col gap-3">
             <span className={columnTitle}>Síguenos</span>
-            {socials.map(({ key, label }) => <a className="hover:opacity-70" href={socialLinks[key]} key={key}
-              rel="noopener noreferrer" target="_blank">{label}</a>)}
+            {socials.map(({ key, label }) => <a className="flex items-center gap-2.5 hover:opacity-70" href={socialLinks[key]} key={key}
+              rel="noopener noreferrer" target="_blank"><SocialIcon className="size-4 [--icon-contrast:var(--band)]" platform={key} />{label}</a>)}
           </div>}
           {phone && <div className="flex flex-col gap-3">
             <span className={columnTitle}>Contacto</span>
             <a className="hover:opacity-70" href={`tel:${phone.replace(/[^+\d]/g, "")}`}>{phone}</a>
-            <span className="text-band-muted">Recojo en tienda</span>
+            {whatsappHref(phone) && !socialLinks.whatsapp && <a className="flex items-center gap-2.5 hover:opacity-70" href={whatsappHref(phone)!} rel="noopener noreferrer" target="_blank">
+              <SocialIcon className="size-4" platform="whatsapp" />WhatsApp</a>}
+            <span className="text-band-muted">Recojo o envío</span>
           </div>}
         </div>
         {mapEmbedUrl && <div className="relative overflow-hidden border border-band-line">

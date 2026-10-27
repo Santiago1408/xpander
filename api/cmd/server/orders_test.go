@@ -119,16 +119,50 @@ func TestDeliveryOrderMessage(t *testing.T) {
 
 func TestOrderCancellationRules(t *testing.T) {
 	cases := []struct {
-		status, payment string
-		allowed         bool
+		status, payment    string
+		stockShort, refund bool
+		allowed            bool
 	}{
-		{"pending", "not_required", true}, {"pending", "awaiting_receipt", true},
-		{"pending", "submitted", true}, {"pending", "rejected", true},
-		{"pending", "verified", false}, {"confirmed", "verified", false}, {"confirmed", "not_required", false},
+		{"pending", "not_required", false, false, true}, {"pending", "awaiting_receipt", false, false, true},
+		{"pending", "submitted", false, false, true}, {"pending", "rejected", false, false, true},
+		{"pending", "verified", false, true, false}, {"pending", "verified", true, false, false},
+		{"pending", "verified", true, true, true},
+		{"confirmed", "verified", true, true, false}, {"confirmed", "not_required", false, false, false},
 	}
 	for _, item := range cases {
-		if err := cancellable(item.status, item.payment); (err == nil) != item.allowed {
-			t.Fatalf("cancellable(%s, %s) = %v", item.status, item.payment, err)
+		if err := cancellable(item.status, item.payment, item.stockShort, item.refund); (err == nil) != item.allowed {
+			t.Fatalf("cancellable(%+v) = %v", item, err)
+		}
+	}
+}
+
+func TestNormalizeStoreSale(t *testing.T) {
+	sale := saleInput{RequestKey: "22222222-2222-4222-8222-222222222222", BranchID: 1, PaymentMethod: "cash",
+		Items: []saleItem{{VariantID: 9, Quantity: 2}, {VariantID: 4, Quantity: 1}}}
+	if err := normalizeSale(&sale); err != nil {
+		t.Fatal(err)
+	}
+	if sale.CustomerName != "Cliente en tienda" || sale.CustomerPhone != "Sin registrar" || sale.Items[0].VariantID != 4 {
+		t.Fatalf("unexpected normalized sale: %+v", sale)
+	}
+	reordered := sale
+	reordered.Items = []saleItem{{VariantID: 9, Quantity: 2}, {VariantID: 4, Quantity: 1}}
+	_ = normalizeSale(&reordered)
+	if saleFingerprint(sale) != saleFingerprint(reordered) {
+		t.Fatal("item order changed the sale fingerprint")
+	}
+	for _, broken := range []func(*saleInput){
+		func(s *saleInput) { s.PaymentMethod = "whatsapp" },
+		func(s *saleInput) { s.Items = nil },
+		func(s *saleInput) { s.Items = []saleItem{{VariantID: 1, Quantity: 1}, {VariantID: 1, Quantity: 2}} },
+		func(s *saleInput) { s.DiscountMinor = -1 },
+		func(s *saleInput) { s.RequestKey = "x" },
+	} {
+		copy := sale
+		copy.Items = append([]saleItem(nil), sale.Items...)
+		broken(&copy)
+		if err := normalizeSale(&copy); err == nil {
+			t.Fatalf("invalid sale accepted: %+v", copy)
 		}
 	}
 }

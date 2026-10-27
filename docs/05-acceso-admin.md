@@ -26,7 +26,8 @@ Visita `http://localhost:3000/admin/login`, entra con el nombre de usuario elegi
 - La contraseña se almacena como hash Argon2id con sal aleatoria; nunca en texto plano. El token de sesión se envía en una cookie `HttpOnly`, `SameSite=Lax`, válida por 12 horas, y la base guarda solo su hash. En producción la cookie tendrá además `Secure`.
 - Las operaciones de inicio y cierre de sesión aceptan únicamente el `Origin` configurado en `PUBLIC_ORIGIN`. En el Compose local es `http://localhost:3000`; usa exactamente esa dirección en el navegador.
 - Hay un límite básico de intentos por usuario y dirección de origen dentro del proceso. Para producción también se necesitarán límites en el proxy y pruebas con su configuración real.
-- No existe todavía recuperación automática de contraseña ni administración de múltiples cuentas; se implementarán antes de usar el panel con más personas. No borres el volumen de PostgreSQL para recuperar acceso.
+- En `/admin/cuenta` el administrador cambia su nombre visible, su nombre de usuario y su contraseña; cada cambio exige la contraseña actual y comparte el límite de intentos del inicio de sesión. Cambiar la contraseña cierra las sesiones de otros dispositivos.
+- No existe todavía recuperación automática de contraseña ni administración de múltiples cuentas. No borres el volumen de PostgreSQL para recuperar acceso.
 - El panel incluye contenido, catálogo, inventario y pedidos. El flujo completo de pedidos requiere una prueba local con PostgreSQL antes de preparar producción.
 
 Al preparar producción, la API deberá configurarse con `APP_ENV=production` y `PUBLIC_ORIGIN=https://xpander.duckdns.org` detrás del Caddy público. Esa configuración no se ha aplicado todavía en el VPS.

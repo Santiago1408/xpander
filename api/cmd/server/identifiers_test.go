@@ -18,3 +18,14 @@ func TestCodeFromName(t *testing.T) {
 		t.Fatalf("suffix = %q", actual)
 	}
 }
+
+func TestBranchCodeUsesUsernameFormat(t *testing.T) {
+	for _, name := range []string{"SUCURSAL CENTRO", "EL ALTO · AV. 6 DE MARZO Y CALLE 3 DE MAYO ZONA SUR", "1", "ÑUÑOA"} {
+		for _, attempt := range []int{1, 12} {
+			code := branchCode(name, attempt)
+			if len(code) < 3 || len(code) > 32 || code[0] < 'a' || code[0] > 'z' {
+				t.Fatalf("branchCode(%q, %d) = %q", name, attempt, code)
+			}
+		}
+	}
+}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Modal, ui } from "../../admin-ui";
+import { notify } from "../../../toast";
 
 export type TrashRef = { kind: string; id: number; label: string };
 
@@ -41,10 +42,12 @@ export default function TrashActions({ item, onChanged, notice = false }: {
       const response = await fetch(`/api/admin/trash/${item.kind}/${item.id}${suffix}`, { method });
       if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo completar la acción.");
       setConfirming(false);
+      notify.success(method === "POST" ? `«${item.label}» restaurado.` : `«${item.label}» eliminado definitivamente.`);
       await onChanged();
     } catch (failure) {
       setConfirming(false);
-      setError(failure instanceof Error ? failure.message : "No se pudo completar la acción.");
+      const message = failure instanceof Error ? failure.message : "No se pudo completar la acción.";
+      setError(message); notify.error(message);
     } finally {
       setBusy(false);
     }

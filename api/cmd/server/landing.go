@@ -33,16 +33,18 @@ type landingMedia struct {
 }
 
 type landingSection struct {
-	ID        int64          `json:"id"`
-	Key       string         `json:"key"`
-	Type      string         `json:"type"`
-	Title     string         `json:"title"`
-	Body      string         `json:"body"`
-	IsVisible bool           `json:"isVisible"`
-	IsDeleted bool           `json:"isDeleted"`
-	Media     []landingMedia `json:"media"`
-	Contact   contactConfig  `json:"contact"`
-	Video     videoConfig    `json:"video"`
+	ID         int64             `json:"id"`
+	Key        string            `json:"key"`
+	Type       string            `json:"type"`
+	Title      string            `json:"title"`
+	Body       string            `json:"body"`
+	IsVisible  bool              `json:"isVisible"`
+	IsDeleted  bool              `json:"isDeleted"`
+	Media      []landingMedia    `json:"media"`
+	Contact    contactConfig     `json:"contact"`
+	Video      videoConfig       `json:"video"`
+	Categories *categoriesConfig `json:"categories,omitempty"`
+	Benefits   *benefitsConfig   `json:"benefits,omitempty"`
 }
 
 type landingDraft struct {
@@ -55,15 +57,17 @@ type landingDraft struct {
 }
 
 type sectionInput struct {
-	ID        int64         `json:"id"`
-	Type      string        `json:"type"`
-	Title     string        `json:"title"`
-	Body      string        `json:"body"`
-	IsVisible bool          `json:"isVisible"`
-	IsDeleted bool          `json:"isDeleted"`
-	MediaIDs  []int64       `json:"mediaIds"`
-	Contact   contactConfig `json:"contact"`
-	Video     videoConfig   `json:"video"`
+	ID         int64             `json:"id"`
+	Type       string            `json:"type"`
+	Title      string            `json:"title"`
+	Body       string            `json:"body"`
+	IsVisible  bool              `json:"isVisible"`
+	IsDeleted  bool              `json:"isDeleted"`
+	MediaIDs   []int64           `json:"mediaIds"`
+	Contact    contactConfig     `json:"contact"`
+	Video      videoConfig       `json:"video"`
+	Categories *categoriesConfig `json:"categories,omitempty"`
+	Benefits   *benefitsConfig   `json:"benefits,omitempty"`
 }
 
 type draftInput struct {
@@ -75,13 +79,15 @@ type draftInput struct {
 }
 
 type publishedSection struct {
-	Key     string         `json:"key"`
-	Type    string         `json:"type"`
-	Title   string         `json:"title"`
-	Body    string         `json:"body"`
-	Media   []landingMedia `json:"media"`
-	Contact contactConfig  `json:"contact"`
-	Video   videoConfig    `json:"video"`
+	Key        string            `json:"key"`
+	Type       string            `json:"type"`
+	Title      string            `json:"title"`
+	Body       string            `json:"body"`
+	Media      []landingMedia    `json:"media"`
+	Contact    contactConfig     `json:"contact"`
+	Video      videoConfig       `json:"video"`
+	Categories *categoriesConfig `json:"categories,omitempty"`
+	Benefits   *benefitsConfig   `json:"benefits,omitempty"`
 }
 
 type publishedLanding struct {
@@ -185,6 +191,22 @@ func (service *landingService) loadDraft(ctx context.Context) (landingDraft, err
 			return draft, err
 		}
 		section.Contact.normalize()
+		if section.Type == "categories" {
+			section.Categories = &categoriesConfig{}
+			if err := json.Unmarshal(config, section.Categories); err != nil {
+				rows.Close()
+				return draft, err
+			}
+			section.Categories.normalize()
+		}
+		if section.Type == "benefits" {
+			section.Benefits = &benefitsConfig{}
+			if err := json.Unmarshal(config, section.Benefits); err != nil {
+				rows.Close()
+				return draft, err
+			}
+			section.Benefits.normalize()
+		}
 		if section.Type == "video" {
 			if err := json.Unmarshal(config, &section.Video); err != nil {
 				rows.Close()
@@ -248,7 +270,7 @@ func (service *landingService) sectionMedia(ctx context.Context, db queryer, sec
 
 func validSectionType(value string) bool {
 	switch value {
-	case "hero", "text", "gallery", "contact", "video", "featured":
+	case "hero", "text", "gallery", "contact", "video", "featured", "categories", "benefits":
 		return true
 	default:
 		return false
@@ -277,6 +299,12 @@ func validateDraft(input draftInput) error {
 			return err
 		}
 		if err := validateVideoConfig(section.Type, section.Video); err != nil {
+			return err
+		}
+		if err := validateCategoriesConfig(section.Type, section.Categories, section.MediaIDs); err != nil {
+			return err
+		}
+		if err := validateBenefitsConfig(section.Type, section.Benefits); err != nil {
 			return err
 		}
 		mediaSeen := map[int64]bool{}
@@ -378,6 +406,20 @@ func (service *landingService) saveDraft(w http.ResponseWriter, r *http.Request)
 				return
 			}
 			config, err = json.Marshal(section.Video)
+		} else if section.Type == "benefits" {
+			benefits := benefitsConfig{}
+			if section.Benefits != nil {
+				benefits = *section.Benefits
+			}
+			benefits.normalize()
+			config, err = json.Marshal(benefits)
+		} else if section.Type == "categories" {
+			categories := categoriesConfig{}
+			if section.Categories != nil {
+				categories = *section.Categories
+			}
+			categories.normalize()
+			config, err = json.Marshal(categories)
 		} else {
 			config, err = json.Marshal(section.Contact)
 		}
@@ -417,7 +459,7 @@ func (service *landingService) saveDraft(w http.ResponseWriter, r *http.Request)
 		for mediaIndex, mediaID := range section.MediaIDs {
 			var kind string
 			if err := tx.QueryRow(r.Context(), `SELECT kind FROM media WHERE id=$1
-				AND purpose='photo' AND deleted_at IS NULL`, mediaID).Scan(&kind); err != nil {
+				AND deleted_at IS NULL`, mediaID).Scan(&kind); err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
 					http.Error(w, "imagen inexistente", http.StatusBadRequest)
 				} else {
@@ -537,6 +579,24 @@ func (service *landingService) publish(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		section.Contact.normalize()
+		if section.Type == "categories" {
+			section.Categories = &categoriesConfig{}
+			if err := json.Unmarshal(config, section.Categories); err != nil {
+				rows.Close()
+				serverError(w, "read section categories", err)
+				return
+			}
+			section.Categories.normalize()
+		}
+		if section.Type == "benefits" {
+			section.Benefits = &benefitsConfig{}
+			if err := json.Unmarshal(config, section.Benefits); err != nil {
+				rows.Close()
+				serverError(w, "read section benefits", err)
+				return
+			}
+			section.Benefits.normalize()
+		}
 		if section.Type == "video" {
 			if err := json.Unmarshal(config, &section.Video); err != nil {
 				rows.Close()

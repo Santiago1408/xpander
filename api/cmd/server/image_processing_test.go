@@ -31,9 +31,9 @@ func TestProcessUploadedImage(t *testing.T) {
 			t.Skip("ImageMagick is not installed")
 		}
 	}
-	canvas := image.NewRGBA(image.Rect(0, 0, 1000, 600))
-	for y := 0; y < 600; y++ {
-		for x := 0; x < 1000; x++ {
+	canvas := image.NewRGBA(image.Rect(0, 0, 2400, 1600))
+	for y := 0; y < 1600; y++ {
+		for x := 0; x < 2400; x++ {
 			canvas.Set(x, y, color.RGBA{R: uint8(x % 255), G: uint8(y % 255), B: 60, A: 255})
 		}
 	}
@@ -46,8 +46,9 @@ func TestProcessUploadedImage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if photo.Main.Mime != "image/webp" || len(photo.Variants) != 2 ||
-		photo.Variants[0].SizeKey != "thumb" || photo.Variants[1].SizeKey != "card" {
+	if photo.Main.Mime != "image/webp" || photo.Main.Width != 1920 || photo.Main.Height != 1280 ||
+		len(photo.Variants) != 3 || photo.Variants[0].SizeKey != "thumb" ||
+		photo.Variants[1].SizeKey != "card" || photo.Variants[2].SizeKey != "detail" {
 		t.Fatalf("unexpected photo output: %+v", photo)
 	}
 	for _, file := range photo.files() {
@@ -71,7 +72,7 @@ func TestProcessUploadedImage(t *testing.T) {
 		t.Fatal(err)
 	}
 	if qr.Main.Mime != "image/png" || len(qr.Variants) != 0 ||
-		qr.Main.Width != 1000 || qr.Main.Height != 600 {
+		qr.Main.Width != 2400 || qr.Main.Height != 1600 {
 		t.Fatalf("QR was resized or encoded lossy: %+v", qr)
 	}
 	qrFile, err := os.Open(filepath.Join(directory, qr.Main.Key))

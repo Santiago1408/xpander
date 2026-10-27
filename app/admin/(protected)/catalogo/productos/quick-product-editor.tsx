@@ -4,7 +4,7 @@ import MediaImage from "../../../../media-image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { EmptyState, Feedback, PageHeader, Pill, formatBOB, ui } from "../../../admin-ui";
+import { ChipRow, EmptyState, FileField, Feedback, PageHeader, Pill, formatBOB, ui } from "../../../admin-ui";
 import { identifierFromName } from "../../../identifier";
 import TrashActions, { type TrashRef } from "../../papelera/trash-actions";
 
@@ -258,22 +258,47 @@ export default function QuickProductEditor() {
       {trashed && <TrashActions item={trashed} notice onChanged={() => window.location.reload()} />}
       <section className="bg-white">
         <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
-          <label className="flex h-10 min-w-[220px] flex-1 items-center gap-2 border border-line px-3 focus-within:border-ink sm:max-w-sm">
+          <label className="flex h-11 w-full items-center gap-2 border border-line px-3 focus-within:border-ink sm:h-10 sm:w-auto sm:min-w-[220px] sm:max-w-sm sm:flex-1">
             <svg aria-hidden="true" className="size-4 text-graphite" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
             <span className="sr-only">Buscar productos</span>
             <input autoFocus={Boolean(query)} className="min-w-0 flex-1 bg-transparent text-sm outline-none" onChange={(event) => setQuery(event.target.value)}
               placeholder="Nombre, código, marca o color" type="search" value={query} />
           </label>
-          <div aria-label="Filtrar por estado" className="flex flex-wrap gap-1.5" role="group">
+          <ChipRow className="w-full sm:w-auto" label="Filtrar por estado">
             {[["all", "Todos"], ["active", "Activos"], ["draft", "Borradores"], ["archived", "Archivados"], ["featured", "Destacados"]].map(([value, label]) =>
-              <button aria-pressed={statusFilter === value} className={ui.chip(statusFilter === value)} key={value}
+              <button aria-pressed={statusFilter === value} className={`${ui.chip(statusFilter === value)} shrink-0`} key={value}
                 onClick={() => setStatusFilter(value)} type="button">{label}</button>)}
-          </div>
-          <span className="ml-auto font-mono text-xs text-graphite">{visible.length} de {liveProducts.length}</span>
+          </ChipRow>
+          <span className="font-mono text-xs text-graphite sm:ml-auto">{visible.length} de {liveProducts.length}</span>
         </div>
         {liveProducts.length === 0 ? <div className="p-6"><EmptyState>Aún no hay productos. Crea el primero con «+ Nuevo producto».</EmptyState></div> :
           visible.length === 0 ? <p className="p-6 text-sm text-graphite">No hay productos con esta búsqueda o filtro.</p> :
-          <div className="overflow-x-auto"><table className="w-full min-w-[760px] border-collapse text-sm">
+          <><ul className="m-0 list-none p-0 md:hidden">{visible.map((item) => {
+            const variants = item.variants.filter((variant) => !variant.isDeleted);
+            const prices = variants.map((variant) => variant.priceMinor);
+            const units = inventory!.stock.filter((row) => variants.some((variant) => variant.id === row.variantId)).reduce((sum, row) => sum + row.quantity, 0);
+            return <li className="border-t border-mist first:border-0" key={item.id}>
+              <button className="flex w-full items-start gap-3 p-4 text-left" onClick={() => openProduct(item)} type="button">
+                <span className="relative aspect-[3/4] w-16 shrink-0 overflow-hidden bg-mist">
+                  {item.media[0] && <MediaImage alt="" className="absolute inset-0 h-full w-full object-cover" height={85} sizes="64px" src={item.media[0].url} width={64} />}
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="text-sm font-semibold leading-snug">{item.name}</span>
+                  <span className="text-xs text-graphite"><span className="font-mono">{item.code}</span>{[item.style, item.color].filter(Boolean).map((value) => ` · ${value}`).join("")}</span>
+                  <span className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <Pill tone={item.status === "active" ? "solid" : item.status === "draft" ? "dashed" : "soft"}>{statusLabel[item.status]}</Pill>
+                    {item.isFeatured && <Pill tone="outline">Destacado</Pill>}
+                  </span>
+                </span>
+                <span className="flex shrink-0 flex-col items-end gap-1">
+                  <span className="font-mono text-sm">{prices.length ? formatBOB(Math.min(...prices)) : "—"}</span>
+                  <span className={`font-mono text-xs ${units <= 3 ? "text-red-700" : "text-graphite"}`}>{units} u.</span>
+                  <span className="font-mono text-[11px] text-graphite">{variants.length} talla(s)</span>
+                </span>
+              </button>
+            </li>;
+          })}</ul>
+          <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[760px] border-collapse text-sm">
             <thead><tr><th className={ui.th}>Producto</th><th className={ui.th}>Tallas</th><th className={`${ui.th} text-right`}>Precio</th>
               <th className={`${ui.th} text-right`}>Stock</th><th className={ui.th}>Estado</th><th className={ui.th}><span className="sr-only">Acciones</span></th></tr></thead>
             <tbody>{visible.map((item) => {
@@ -305,7 +330,7 @@ export default function QuickProductEditor() {
                 <td className={`${ui.td} text-right`}><button className={ui.quiet} onClick={() => openProduct(item)} type="button">Editar</button></td>
               </tr>;
             })}</tbody>
-          </table></div>}
+          </table></div></>}
       </section>
     </>;
   }
@@ -323,7 +348,7 @@ export default function QuickProductEditor() {
       </div>
       <Feedback error={error} notice={notice} />
       {trashed && <TrashActions item={trashed} notice onChanged={() => window.location.reload()} />}
-      <form className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]" onSubmit={(event) => void save(event)}>
+      <form className="grid items-start grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]" onSubmit={(event) => void save(event)}>
         <fieldset className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0" disabled={busy}>
           <section className={`${ui.card} ${ui.cardPad}`}>
             <h2 className={ui.cardTitle}>Información</h2>
@@ -404,10 +429,8 @@ export default function QuickProductEditor() {
                 <label className={ui.label}>Texto alternativo de la nueva imagen
                   <input className={ui.input} maxLength={200} onChange={(event) => setAltText(event.target.value)} placeholder={current.name || "Describe la imagen"} value={altText} />
                 </label>
-                <label className={ui.label}>Subir PNG, JPEG o WebP
-                  <input accept="image/png,image/jpeg,image/webp" className={ui.file} disabled={current.media.length >= 12}
-                    onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadImage(file); event.target.value = ""; }} type="file" />
-                </label>
+                <FileField accept="image/png,image/jpeg,image/webp" disabled={current.media.length >= 12 || busy}
+                  hint="PNG, JPEG o WebP de hasta 8 MiB" label="Subir imagen" onFile={(file) => { if (file) void uploadImage(file); }} />
               </div>
               <div className="flex flex-col gap-3">
                 <label className={ui.label}>O elegir del banco de imágenes
@@ -530,13 +553,16 @@ export default function QuickProductEditor() {
               <div className="flex justify-between"><span className="text-graphite">Entradas de stock nuevas</span>
                 <span className="font-mono">{current.variants.reduce((sum, variant) => sum + variant.stockEntries.length, 0)}</span></div>
             </div>
-            <button className={`${ui.primary} h-12 w-full`} disabled={busy} type="submit">{busy ? "Guardando…" : current.id ? "Guardar cambios" : "Registrar producto"}</button>
+            <button className={`${ui.primary} hidden h-12 w-full xl:inline-flex`} disabled={busy} type="submit">{busy ? "Guardando…" : current.id ? "Guardar cambios" : "Registrar producto"}</button>
             {current.id > 0 && <button className={`${ui.dangerLink} self-start`} disabled={busy}
               onClick={() => void trash(`/api/admin/catalog/products/${current.id}`,
                 { kind: "product", id: current.id, label: current.name })} type="button">Enviar producto a papelera</button>}
           </section>
           <p className={`${ui.hint} px-1`}>Producto, variantes, imágenes y entradas de stock se guardan juntos: si algo falla, no se registra nada. Las compras posteriores con otro costo se registran en <Link className="underline" href="/admin/inventario">Inventario</Link>.</p>
         </aside>
+        <div className="sticky bottom-[calc(1rem+env(safe-area-inset-bottom))] z-30 flex items-center gap-3 border border-line bg-white p-3 shadow-lg lg:bottom-4 xl:hidden">
+          <button className={`${ui.primary} flex-1`} disabled={busy} type="submit">{busy ? "Guardando…" : current.id ? "Guardar cambios" : "Registrar producto"}</button>
+        </div>
       </form>
     </>;
   }

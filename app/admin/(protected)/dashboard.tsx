@@ -3,15 +3,15 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import MediaImage from "../../media-image";
-import { Card, EmptyState, Feedback, Pill, formatBOB, ui, type PillTone } from "../admin-ui";
+import { Card, ChipRow, EmptyState, Feedback, Pill, formatBOB, ui, type PillTone } from "../admin-ui";
 import { useAdminUser } from "./admin-shell";
 
 type OrderItem = { productName: string; variantLabel: string; unitPriceMinor: number; quantity: number; lineTotalMinor: number };
 export type AdminOrder = {
   id: number; number: string; status: string; customerName: string; customerPhone: string; customerNote: string;
   pickupBranchName: string; pickupAddress: string; totalMinor: number; createdAt: string; confirmedAt: string | null;
-  cancelledAt: string | null; deliveryMethod: "pickup" | "delivery";
-  paymentMethod: "whatsapp" | "qr"; paymentStatus: "not_required" | "awaiting_receipt" | "submitted" | "verified" | "rejected";
+  cancelledAt: string | null; deliveryMethod: "pickup" | "delivery"; channel: "online" | "store"; discountMinor: number;
+  paymentMethod: "whatsapp" | "qr" | "cash" | "card" | "store_qr"; paymentStatus: "not_required" | "awaiting_receipt" | "submitted" | "verified" | "rejected";
   hasReceipt: boolean; items: OrderItem[];
 };
 type StockRow = { branchId: number; variantId: number; label: string; quantity: number };
@@ -20,8 +20,17 @@ type Product = { id: number; name: string; status: string; isDeleted: boolean; i
 const day = 24 * 60 * 60 * 1000;
 const periods = [7, 14, 30];
 
+export const paymentMethodLabel: Record<AdminOrder["paymentMethod"], string> = {
+  qr: "QR", whatsapp: "WhatsApp", cash: "Efectivo", card: "Tarjeta", store_qr: "QR en tienda",
+};
+
+export function deliveryLabel(order: AdminOrder) {
+  return `${order.channel === "store" ? "En tienda" : order.deliveryMethod === "delivery" ? "Envío" : "Recojo"} · ${order.pickupBranchName}`;
+}
+
 // One shared vocabulary for order state across the dashboard and the orders screen.
 export function orderState(order: AdminOrder): { label: string; tone: PillTone } {
+  if (order.status === "confirmed" && order.channel === "store") return { label: "Venta en tienda", tone: "solid" };
   if (order.status === "confirmed") return { label: "Confirmado", tone: "solid" };
   if (order.status === "cancelled") return { label: "Cancelado", tone: "muted" };
   if (order.status !== "pending") return { label: order.status, tone: "outline" };
@@ -53,12 +62,12 @@ function SalesChart({ bars }: { bars: { label: string; value: number; orders: nu
   const top = niceMax(Math.max(...bars.map((bar) => bar.value)));
   const total = bars.reduce((sum, bar) => sum + bar.value, 0);
   const readout = hover >= 0 ? `${bars[hover].label} · ${formatBOB(bars[hover].value)} · ${bars[hover].orders} pedido(s)` : `Total ${formatBOB(total)}`;
-  return <figure className="m-0 flex flex-col gap-5">
+  return <figure className="m-0 flex h-full flex-col gap-5">
     <figcaption className="flex flex-wrap items-baseline justify-between gap-3">
       <span className="text-base font-semibold">Ventas confirmadas por día (Bs.)</span>
       <span aria-live="polite" className="font-mono text-[13px] text-body">{readout}</span>
     </figcaption>
-    <div className="flex h-60 gap-2.5">
+    <div className="flex min-h-56 flex-1 gap-2.5">
       <div aria-hidden="true" className="flex w-11 flex-col justify-between pb-[22px] text-right font-mono text-[11px] text-graphite">
         <span>{compactBOB(top)}</span><span>{compactBOB(top / 2)}</span><span>0</span>
       </div>
@@ -77,11 +86,12 @@ function SalesChart({ bars }: { bars: { label: string; value: number; orders: nu
         </div>
       </div>
     </div>
-    <table className="sr-only">
+    {/* Firefox does not clip a table caption with the table, so the wrapper is hidden instead. */}
+    <div className="sr-only"><table>
       <caption>Ventas confirmadas por día</caption>
       <thead><tr><th scope="col">Día</th><th scope="col">Ventas</th><th scope="col">Pedidos</th></tr></thead>
       <tbody>{bars.map((bar) => <tr key={bar.label}><td>{bar.label}</td><td>{formatBOB(bar.value)}</td><td>{bar.orders}</td></tr>)}</tbody>
-    </table>
+    </table></div>
   </figure>;
 }
 
@@ -132,20 +142,22 @@ export default function Dashboard() {
     });
     const pending = orders.filter((order) => order.status === "pending");
     const byState = [
-      { label: "Pendientes por WhatsApp", count: pending.filter((order) => order.paymentMethod === "whatsapp").length },
       { label: "Esperando comprobante QR", count: pending.filter((order) => order.paymentStatus === "awaiting_receipt" || order.paymentStatus === "rejected").length },
       { label: "Comprobantes por revisar", count: pending.filter((order) => order.paymentStatus === "submitted").length },
       { label: "Pago verificado, sin confirmar", count: pending.filter((order) => order.paymentStatus === "verified").length },
       { label: "Confirmados", count: orders.filter((order) => order.status === "confirmed").length },
       { label: "Cancelados", count: orders.filter((order) => order.status === "cancelled").length },
-    ];
+      // Orders created before QR-only checkout, if any remain open.
+      { label: "Pendientes sin pago en línea", count: pending.filter((order) => order.paymentMethod === "whatsapp").length },
+    ].filter((item, index) => index < 5 || item.count > 0);
     const sold = new Map<string, { units: number; revenue: number }>();
     for (const order of confirmed) for (const item of order.items) {
       const entry = sold.get(item.productName) || { units: 0, revenue: 0 };
       sold.set(item.productName, { units: entry.units + item.quantity, revenue: entry.revenue + item.lineTotalMinor });
     }
     const best = [...sold.entries()].sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 4);
-    return { confirmed, created, sales, bars, pending, byState, best };
+    const storeSales = confirmed.filter((order) => order.channel === "store").length;
+    return { confirmed, created, sales, bars, pending, byState, best, storeSales };
   }, [orders, now, period]);
 
   const hour = now ? new Date(now).getHours() : 12;
@@ -173,10 +185,10 @@ export default function Dashboard() {
 
     <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
       {[
-        { label: "Ventas confirmadas", value: stats ? formatBOB(stats.sales) : "—", note: `${stats?.confirmed.length ?? 0} pedido(s) confirmados` },
+        { label: "Ventas confirmadas", value: stats ? formatBOB(stats.sales) : "—", note: `${stats?.confirmed.length ?? 0} venta(s) · ${stats?.storeSales ?? 0} en tienda` },
         { label: "Pedidos registrados", value: stats ? String(stats.created.length) : "—", note: `en los últimos ${period} días` },
         { label: "Ticket promedio", value: stats && stats.confirmed.length ? formatBOB(Math.round(stats.sales / stats.confirmed.length)) : "—", note: "por pedido confirmado" },
-        { label: "Por atender", value: stats ? String(stats.pending.length) : "—", note: `${stats?.byState[2].count ?? 0} comprobante(s) por revisar` },
+        { label: "Por atender", value: stats ? String(stats.pending.length) : "—", note: `${stats?.byState[1].count ?? 0} comprobante(s) por revisar` },
       ].map((kpi) => <div className="flex flex-col gap-3.5 bg-white p-4 sm:p-[22px]" key={kpi.label}>
         <span className="text-[13px] text-graphite">{kpi.label}</span>
         <span className="font-mono text-[clamp(22px,2.4vw,30px)] tracking-[-0.02em]">{kpi.value}</span>
@@ -184,7 +196,7 @@ export default function Dashboard() {
       </div>)}
     </div>
 
-    <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[2fr_1fr]">
       <div className="bg-white p-5 sm:p-6">{stats ? <SalesChart bars={stats.bars} /> : <p className="text-sm text-graphite">Cargando ventas…</p>}</div>
       <Card title="Pedidos por estado">
         <div className="flex flex-col gap-4">
@@ -200,28 +212,28 @@ export default function Dashboard() {
       </Card>
     </div>
 
-    <div className="grid items-start gap-4 xl:grid-cols-[2fr_1fr]">
-      <section className="min-w-0 bg-white">
+    <div className="grid items-start grid-cols-1 gap-4 xl:grid-cols-[2fr_1fr]">
+      <section className="min-w-0 max-w-full overflow-hidden bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
           <h2 className={ui.cardTitle}>Pedidos recientes</h2>
-          <div aria-label="Filtrar por estado" className="flex flex-wrap gap-1.5" role="group">
+          <ChipRow className="w-full sm:w-auto" label="Filtrar por estado">
             {[["all", "Todos"], ["pending", "Pendientes"], ["review", "Por revisar"], ["confirmed", "Confirmados"]].map(([value, label]) =>
-              <button aria-pressed={filter === value} className={ui.chip(filter === value)} key={value} onClick={() => setFilter(value)} type="button">{label}</button>)}
-          </div>
+              <button aria-pressed={filter === value} className={`${ui.chip(filter === value)} shrink-0`} key={value} onClick={() => setFilter(value)} type="button">{label}</button>)}
+          </ChipRow>
         </div>
         {!orders ? <p className="p-6 text-sm text-graphite">Cargando pedidos…</p> : recent.length === 0 ? <p className="p-6 text-sm text-graphite">No hay pedidos con este estado.</p> :
-          <div className="overflow-x-auto"><table className="w-full min-w-[640px] border-collapse text-sm">
-            <thead><tr><th className={ui.th}>Pedido</th><th className={ui.th}>Cliente</th><th className={ui.th}>Entrega</th>
+          <div className="max-w-full overflow-x-auto overscroll-x-contain"><table className="w-full min-w-[640px] border-collapse text-sm">
+            <thead><tr><th className={`${ui.th} sticky left-0 bg-white`}>Pedido</th><th className={ui.th}>Cliente</th><th className={ui.th}>Entrega</th>
               <th className={ui.th}>Pago</th><th className={ui.th}>Estado</th><th className={`${ui.th} text-right`}>Total</th></tr></thead>
             <tbody>{recent.map((order) => {
               const state = orderState(order);
-              return <tr className="hover:bg-soft" key={order.id}>
-                <td className={`${ui.td} font-mono text-[13px]`}><Link className="hover:underline" href={`/admin/pedidos?q=${order.number}`}>{order.number}</Link></td>
+              return <tr className="group hover:bg-soft" key={order.id}>
+                <td className={`${ui.td} sticky left-0 whitespace-nowrap bg-white font-mono text-[13px] shadow-[1px_0_0_#ededed] group-hover:bg-soft`}><Link className="hover:underline" href={`/admin/pedidos?q=${order.number}`}>{order.number}</Link></td>
                 <td className={ui.td}>{order.customerName}</td>
-                <td className={`${ui.td} text-graphite`}>{order.deliveryMethod === "delivery" ? "Envío" : "Recojo"} · {order.pickupBranchName}</td>
-                <td className={`${ui.td} text-graphite`}>{order.paymentMethod === "qr" ? "QR" : "WhatsApp"}</td>
+                <td className={`${ui.td} whitespace-nowrap text-graphite`}>{deliveryLabel(order)}</td>
+                <td className={`${ui.td} whitespace-nowrap text-graphite`}>{paymentMethodLabel[order.paymentMethod]}</td>
                 <td className={ui.td}><Pill tone={state.tone}>{state.label}</Pill></td>
-                <td className={`${ui.td} text-right font-mono`}>{formatBOB(order.totalMinor)}</td>
+                <td className={`${ui.td} whitespace-nowrap text-right font-mono`}>{formatBOB(order.totalMinor)}</td>
               </tr>;
             })}</tbody>
           </table></div>}

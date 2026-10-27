@@ -25,6 +25,7 @@ type branchService struct {
 func registerBranchRoutes(mux *http.ServeMux, pool *pgxpool.Pool, admin *adminAuth) {
 	service := &branchService{pool: pool, admin: admin}
 	mux.HandleFunc("GET /api/admin/branches", service.list)
+	mux.HandleFunc("POST /api/admin/branches", service.create)
 	mux.HandleFunc("PUT /api/admin/branches/{id}", service.update)
 }
 
@@ -55,6 +56,67 @@ func (service *branchService) list(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, items)
 }
 
+type branchInput struct {
+	Name         string `json:"name"`
+	Address      string `json:"address"`
+	Instructions string `json:"instructions"`
+}
+
+func readBranchInput(w http.ResponseWriter, r *http.Request) (branchInput, bool) {
+	var input branchInput
+	if !decodeJSON(w, r, &input, 4096) {
+		return input, false
+	}
+	input.Name = displayLabel(input.Name)
+	input.Address = strings.TrimSpace(input.Address)
+	input.Instructions = strings.TrimSpace(input.Instructions)
+	if !validVocabularyName(input.Name) || len(input.Address) > 300 || len(input.Instructions) > 500 {
+		http.Error(w, "nombre, dirección o instrucciones inválidas", http.StatusBadRequest)
+		return input, false
+	}
+	return input, true
+}
+
+// branchCode derives the internal code from the name, in the username format
+// used by the bootstrap tool (lowercase, 3-32 characters).
+func branchCode(name string, attempt int) string {
+	base := codeFromName(name)
+	if len(base) > 28 {
+		base = strings.TrimRight(base[:28], "-")
+	}
+	if len(base) < 3 {
+		base = "sucursal"
+	}
+	return codeWithSuffix(base, attempt)
+}
+
+func (service *branchService) create(w http.ResponseWriter, r *http.Request) {
+	if !(&productService{pool: service.pool, admin: service.admin}).requireOwner(w, r) {
+		return
+	}
+	input, ok := readBranchInput(w, r)
+	if !ok {
+		return
+	}
+	var item adminBranch
+	for attempt := 1; attempt <= 50; attempt++ {
+		err := service.pool.QueryRow(r.Context(), `INSERT INTO branches (code, name, address, pickup_instructions)
+			VALUES ($1,$2,NULLIF($3,''),NULLIF($4,'')) ON CONFLICT (code) DO NOTHING
+			RETURNING id, code, name, COALESCE(address,''), COALESCE(pickup_instructions,'')`,
+			branchCode(input.Name, attempt), input.Name, input.Address, input.Instructions).
+			Scan(&item.ID, &item.Code, &item.Name, &item.Address, &item.Instructions)
+		if err == nil {
+			writeJSON(w, http.StatusCreated, item)
+			return
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			serverError(w, "create branch", err)
+			return
+		}
+	}
+	http.Error(w, "no se pudo asignar un código a la sucursal", http.StatusConflict)
+}
+
 func (service *branchService) update(w http.ResponseWriter, r *http.Request) {
 	if !(&productService{pool: service.pool, admin: service.admin}).requireOwner(w, r) {
 		return
@@ -63,19 +125,8 @@ func (service *branchService) update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var input struct {
-		Name         string `json:"name"`
-		Address      string `json:"address"`
-		Instructions string `json:"instructions"`
-	}
-	if !decodeJSON(w, r, &input, 4096) {
-		return
-	}
-	input.Name = displayLabel(input.Name)
-	input.Address = strings.TrimSpace(input.Address)
-	input.Instructions = strings.TrimSpace(input.Instructions)
-	if !validVocabularyName(input.Name) || len(input.Address) > 300 || len(input.Instructions) > 500 {
-		http.Error(w, "nombre, dirección o instrucciones inválidas", http.StatusBadRequest)
+	input, ok := readBranchInput(w, r)
+	if !ok {
 		return
 	}
 	var item adminBranch

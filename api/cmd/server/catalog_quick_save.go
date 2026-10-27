@@ -253,8 +253,7 @@ func (service *productService) saveQuick(w http.ResponseWriter, r *http.Request,
 	}
 	if len(input.MediaIDs) > 0 {
 		rows, err := tx.Query(r.Context(), `SELECT id FROM media WHERE id=ANY($1)
-			AND kind='image' AND source_type='local' AND purpose='photo'
-			AND deleted_at IS NULL`, input.MediaIDs)
+			AND kind='image' AND source_type='local' AND deleted_at IS NULL`, input.MediaIDs)
 		if err != nil {
 			serverError(w, "check quick product images", err)
 			return

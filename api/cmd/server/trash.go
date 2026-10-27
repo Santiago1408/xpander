@@ -394,6 +394,21 @@ func (service *trashService) purge(w http.ResponseWriter, r *http.Request) {
 			serverError(w, "update drafts using media", err)
 			return
 		}
+		// Category tiles keep their image IDs inside JSON as well as in the
+		// relation table. Clear the draft reference before removing that relation.
+		if _, err := tx.Exec(r.Context(), `UPDATE page_sections s SET
+			config=jsonb_set(s.config, '{tiles}', (
+				SELECT jsonb_agg(CASE WHEN tile.value->>'mediaId'=$1::text
+					THEN jsonb_set(tile.value, '{mediaId}', '0'::jsonb)
+					ELSE tile.value END ORDER BY tile.ordinality)
+				FROM jsonb_array_elements(s.config->'tiles') WITH ORDINALITY AS tile(value, ordinality)
+			), true), updated_at=now()
+			WHERE s.section_type='categories' AND EXISTS (
+				SELECT 1 FROM jsonb_array_elements(s.config->'tiles') AS tile(value)
+				WHERE tile.value->>'mediaId'=$1::text)`, id); err != nil {
+			serverError(w, "clear deleted category image", err)
+			return
+		}
 		if _, err := tx.Exec(r.Context(), `DELETE FROM product_media WHERE media_id=$1`, id); err != nil {
 			trashError(w, "unlink media from products", err)
 			return

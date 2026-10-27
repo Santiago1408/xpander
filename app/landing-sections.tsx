@@ -5,8 +5,9 @@ import ProductCard, { BrandPlaceholder } from "./product-card";
 import type { CatalogProduct } from "./catalogo/catalog-shop";
 import SiteFooter from "./site-footer";
 import SiteHeader from "./site-header";
+import { BenefitIcon } from "./benefit-icons";
 import SocialLinks from "./social-links";
-import { audienceHref, brandHref, catalogBrands, catalogNav, catalogTerms, styleHref, titleCase } from "./shop-format";
+import { audienceHref, brandHref, catalogBrands, catalogNav, catalogTerms, styleHref, titleCase, whatsappHref } from "./shop-format";
 
 export type LandingMedia = {
   id: number;
@@ -24,9 +25,24 @@ export type LandingSection = {
   media: LandingMedia[];
   contact?: { socialLinks?: Record<string, string>; mapUrl?: string; mapEmbedUrl?: string };
   video?: { url?: string; embedUrl?: string };
+  categories?: CategoriesConfig;
+  benefits?: BenefitsConfig;
   isVisible?: boolean;
   isDeleted?: boolean;
 };
+
+export type BenefitItem = { icon: string; title: string; text: string };
+export type BenefitsConfig = { items: BenefitItem[] };
+
+// Starting point for a new benefits section: the automatic strip shown until one exists.
+export const defaultBenefits: BenefitItem[] = [
+  { icon: "store", title: "Recojo o envío", text: "Retira en la sucursal o pide envío a domicilio; el envío se coordina por WhatsApp." },
+  { icon: "qr", title: "Pago por QR", text: "Paga desde la app de tu banco y adjunta tu comprobante." },
+  { icon: "chat", title: "Confirmación por WhatsApp", text: "Envías el detalle por WhatsApp y el negocio confirma tu pedido." },
+];
+
+export type CategoryTile = { mediaId: number; title: string; linkKind: "" | "style" | "audience" | "brand"; linkValue: string };
+export type CategoriesConfig = { layout: "cards" | "panels"; columns: number; tiles: CategoryTile[] };
 
 export type PublishedLanding = {
   title: string;
@@ -142,6 +158,56 @@ function ShopByStyle({ styles, products }: { styles: string[]; products: Catalog
   );
 }
 
+export function categoryHref(tile: CategoryTile): string | null {
+  if (!tile.linkKind || !tile.linkValue) return null;
+  return tile.linkKind === "style" ? styleHref(tile.linkValue) : tile.linkKind === "audience" ? audienceHref(tile.linkValue) : brandHref(tile.linkValue);
+}
+
+// Large image blocks chosen by the owner, each with its own image, text and link.
+function Categories({ section }: { section: LandingSection }) {
+  const config = section.categories ?? { layout: "cards", columns: 2, tiles: [] };
+  const columns = { 1: "md:grid-cols-1", 2: "md:grid-cols-2", 3: "md:grid-cols-3" }[config.columns] ?? "md:grid-cols-2";
+  const sizes = `(max-width: 768px) 100vw, ${Math.round(100 / Math.max(1, config.columns))}vw`;
+  const mediaFor = (tile: CategoryTile) => section.media.find((item) => item.id === tile.mediaId);
+  return (
+    <section className={`xp-container ${sectionGap}`} id={section.key}>
+      {(section.title || section.body) && <div className="mb-10 flex flex-wrap items-end justify-between gap-6">
+        {section.title && <h2 className={heading}>{section.title}</h2>}
+        <Body className="max-w-[360px] text-[15px] leading-relaxed text-graphite" text={section.body} />
+      </div>}
+      <div className={`grid gap-5 ${config.layout === "panels" && config.columns > 1 ? "grid-cols-2" : "grid-cols-1"} ${columns}`}>
+        {config.tiles.map((tile, index) => {
+          const href = categoryHref(tile);
+          const image = mediaFor(tile);
+          if (config.layout === "panels") {
+            const panel = <div className={`relative overflow-hidden ${config.columns === 1 ? "aspect-[16/9]" : "aspect-[5/6]"} ${index % 2 ? "bg-[#e4e4e4]" : "bg-mist"}`}>
+              <Picture image={image} sizes={sizes} />
+              {(tile.title || href) && <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/55 to-transparent" />}
+              <div className="absolute inset-x-3 bottom-3 flex items-end justify-between gap-3 md:inset-x-6 md:bottom-6">
+                {tile.title && <span className="xp-display text-[clamp(18px,4vw,64px)] leading-none text-white [text-shadow:0_1px_24px_rgba(0,0,0,.35)]">{tile.title}</span>}
+                {href && <span className="hidden text-sm font-semibold text-white underline underline-offset-4 [text-shadow:0_1px_12px_rgba(0,0,0,.4)] sm:inline">Comprar</span>}
+              </div>
+            </div>;
+            return href ? <Link className="xp-card" href={href} key={index}>{panel}</Link> : <div key={index}>{panel}</div>;
+          }
+          const card = <>
+            <div className="relative aspect-[4/5] overflow-hidden bg-mist"><Picture image={image} sizes={sizes} /></div>
+            <div className="flex items-baseline justify-between border-t border-ink pt-3.5">
+              <div className="flex items-baseline gap-4">
+                <span className="font-mono text-xs text-graphite">{String(index + 1).padStart(2, "0")}</span>
+                {tile.title && <span className="xp-display text-[22px]">{tile.title}</span>}
+              </div>
+              {href && <span className="text-[13px] font-medium">Ver todo →</span>}
+            </div>
+          </>;
+          return href ? <Link className="xp-card flex flex-col gap-4 text-ink" href={href} key={index}>{card}</Link> :
+            <div className="flex flex-col gap-4" key={index}>{card}</div>;
+        })}
+      </div>
+    </section>
+  );
+}
+
 function Featured({ section, products }: { section: LandingSection; products: CatalogProduct[] }) {
   return (
     <section className={`xp-container ${sectionGap}`} id={section.key}>
@@ -228,14 +294,18 @@ function Video({ section }: { section: LandingSection }) {
   );
 }
 
-function Contact({ section }: { section: LandingSection }) {
+function Contact({ section, phone }: { section: LandingSection; phone?: string }) {
+  // A registered phone adds a WhatsApp link unless the section already sets one.
+  const links = { ...section.contact?.socialLinks };
+  const whatsapp = links.whatsapp || whatsappHref(phone);
+  if (whatsapp) links.whatsapp = whatsapp;
   return (
     <section className={`xp-container ${sectionGap}`} id={section.key}>
       <div className="grid items-end gap-10 border-t border-ink pt-10 lg:grid-cols-2">
         <h2 className="xp-display m-0 text-[clamp(36px,4.6vw,72px)] leading-[0.95] tracking-[-0.02em] [overflow-wrap:anywhere]">{section.title || "Contacto"}</h2>
         <div className="flex flex-col gap-6">
           <Body className="text-[15px] leading-[1.65] text-body" text={section.body} />
-          <SocialLinks links={section.contact?.socialLinks} />
+          <SocialLinks links={links} />
         </div>
       </div>
       {section.media.length > 0 && <div className="mt-10 grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-5">
@@ -247,22 +317,18 @@ function Contact({ section }: { section: LandingSection }) {
   );
 }
 
-function Benefits({ qrAvailable }: { qrAvailable: boolean }) {
-  const items = [
-    { title: "Recojo o envío", text: "Retira en la sucursal o pide envío a domicilio; el envío se coordina por WhatsApp.",
-      icon: <path d="M3 10l9-6 9 6v10H3zM9 20v-6h6v6" /> },
-    { title: "Pago por QR", text: qrAvailable ? "Paga desde la app de tu banco y adjunta tu comprobante." : "El pago en línea no está disponible por el momento.",
-      icon: <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3zM14 20h2M20 14v2" /> },
-    { title: "Confirmación por WhatsApp", text: "Envías el detalle por WhatsApp y el negocio confirma tu pedido.",
-      icon: <path d="M4 20l1.5-4A8 8 0 1 1 9 19.5L4 20z" /> },
-  ];
+function Benefits({ items, section }: { items: BenefitItem[]; section?: LandingSection }) {
   return (
-    <section className={`xp-container ${sectionGap} pb-[clamp(56px,7vw,112px)]`}>
+    <section className={`xp-container ${sectionGap} ${section ? "" : "pb-[clamp(56px,7vw,112px)]"}`} id={section?.key}>
+      {section && (section.title || section.body) && <div className="mb-8 flex flex-wrap items-end justify-between gap-6">
+        {section.title && <h2 className={heading}>{section.title}</h2>}
+        <Body className="max-w-[360px] text-[15px] leading-relaxed text-graphite" text={section.body} />
+      </div>}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] border-y border-b-line border-t-ink">
-        {items.map((item) => <div className="flex flex-col gap-3.5 py-8 pr-6" key={item.title}>
-          <svg aria-hidden="true" className="size-7" fill="none" stroke="currentColor" strokeWidth="1.4" viewBox="0 0 24 24">{item.icon}</svg>
-          <span className="text-base font-semibold">{item.title}</span>
-          <span className="text-sm leading-[1.55] text-graphite">{item.text}</span>
+        {items.map((item, index) => <div className="flex flex-col gap-3.5 py-8 pr-6" key={index}>
+          <BenefitIcon icon={item.icon} />
+          {item.title && <span className="text-base font-semibold">{item.title}</span>}
+          {item.text && <span className="text-sm leading-[1.55] text-graphite">{item.text}</span>}
         </div>)}
       </div>
     </section>
@@ -279,6 +345,10 @@ export default function LandingSections({ landing, products = [], business }: {
   const { audiences, styles } = catalogTerms(products);
   const nav = catalogNav(products);
   const brands = catalogBrands(products);
+  // Owner-made image blocks replace the automatic "Compra por estilo" block.
+  const hasCategories = sections.some((section) => section.type === "categories");
+  // An editable benefits section replaces the automatic strip before the footer.
+  const hasBenefits = sections.some((section) => section.type === "benefits");
   const styleBlocks = styles.filter((style) => products.some((product) => product.style === style));
   const contact = sections.find((section) => section.type === "contact" &&
     (section.contact?.mapUrl || section.contact?.mapEmbedUrl))?.contact;
@@ -307,17 +377,20 @@ export default function LandingSections({ landing, products = [], business }: {
         else if (section.type === "featured") block = <Featured products={featuredProducts} section={section} />;
         else if (section.type === "gallery") block = <Gallery section={section} />;
         else if (section.type === "video") block = <Video section={section} />;
-        else if (section.type === "contact") block = <Contact section={section} />;
+        else if (section.type === "contact") block = <Contact phone={business?.phone} section={section} />;
+        else if (section.type === "benefits") block = <Benefits items={section.benefits?.items ?? []} section={section} />;
+        else if (section.type === "categories") block = <Categories section={section} />;
         else block = <Editorial section={section} />;
         return <div key={section.key}>
           {block}
           {index === extrasAfter && <>
             {brands.length > 0 && <BrandMarquee brands={brands} />}
-            {styleBlocks.length > 1 && <ShopByStyle products={products} styles={styleBlocks} />}
+            {styleBlocks.length > 1 && !hasCategories && <ShopByStyle products={products} styles={styleBlocks} />}
           </>}
         </div>;
       })}
-      <Benefits qrAvailable={Boolean(business?.qrUrl)} />
+      {hasBenefits ? <div className="pb-[clamp(56px,7vw,112px)]" /> : <Benefits items={defaultBenefits.map((item) => item.icon === "qr" && !business?.qrUrl && business ?
+        { ...item, text: "El pago en línea no está disponible por el momento." } : item)} />}
       <SiteFooter mapEmbedUrl={contact?.mapEmbedUrl || contact?.mapUrl} nav={nav}
         phone={business?.phone} socialLinks={socialLinks} />
     </>
