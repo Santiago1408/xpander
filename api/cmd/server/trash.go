@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -26,6 +27,49 @@ type trashService struct {
 	pool     *pgxpool.Pool
 	admin    *adminAuth
 	mediaDir string
+}
+
+func redactedLandingSnapshot(raw []byte, mediaID int64) ([]byte, error) {
+	var snapshot publishedLanding
+	if err := json.Unmarshal(raw, &snapshot); err != nil { return nil, err }
+	for sectionIndex := range snapshot.Sections {
+		for imageIndex := range snapshot.Sections[sectionIndex].Media {
+			image := &snapshot.Sections[sectionIndex].Media[imageIndex]
+			if image.ID == mediaID {
+				image.URL = ""
+				image.AltText = "Imagen eliminada"
+				image.Removed = true
+			}
+		}
+	}
+	return json.Marshal(snapshot)
+}
+
+func redactPublicationMedia(ctx context.Context, tx pgx.Tx, mediaID int64) error {
+	rows, err := tx.Query(ctx, `SELECT pub.id, pub.snapshot FROM page_publications pub
+		JOIN page_publication_media pm ON pm.publication_id=pub.id
+		WHERE pm.media_id=$1 FOR UPDATE OF pub`, mediaID)
+	if err != nil { return err }
+	type version struct { id int64; snapshot []byte }
+	versions := []version{}
+	for rows.Next() {
+		var item version
+		if err := rows.Scan(&item.id, &item.snapshot); err != nil { rows.Close(); return err }
+		versions = append(versions, item)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil { return err }
+	if len(versions) == 0 { return nil }
+	if _, err := tx.Exec(ctx, `SET LOCAL xpander.allow_media_redaction = 'on'`); err != nil { return err }
+	for _, version := range versions {
+		body, err := redactedLandingSnapshot(version.snapshot, mediaID)
+		if err != nil { return err }
+		if _, err := tx.Exec(ctx, `UPDATE page_publications SET snapshot=$2::jsonb WHERE id=$1`,
+			version.id, string(body)); err != nil { return err }
+	}
+	_, err = tx.Exec(ctx, `DELETE FROM page_publication_media WHERE media_id=$1`, mediaID)
+	return err
 }
 
 func registerTrashRoutes(mux *http.ServeMux, pool *pgxpool.Pool, admin *adminAuth, mediaDir string) {
@@ -241,6 +285,20 @@ func (service *trashService) purge(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "el producto aparece en pedidos históricos y no puede borrarse definitivamente", http.StatusConflict)
 			return
 		}
+		if _, err := tx.Exec(r.Context(), `SET LOCAL xpander.allow_stock_purge = 'on'`); err != nil {
+			serverError(w, "authorize test inventory purge", err)
+			return
+		}
+		if _, err := tx.Exec(r.Context(), `DELETE FROM stock_movements WHERE variant_id IN
+			(SELECT id FROM product_variants WHERE product_id=$1)`, id); err != nil {
+			trashError(w, "delete product inventory history", err)
+			return
+		}
+		if _, err := tx.Exec(r.Context(), `DELETE FROM branch_stock WHERE variant_id IN
+			(SELECT id FROM product_variants WHERE product_id=$1)`, id); err != nil {
+			trashError(w, "delete product balances", err)
+			return
+		}
 		if _, err := tx.Exec(r.Context(), `DELETE FROM product_variants WHERE product_id=$1`, id); err != nil {
 			trashError(w, "delete product variants", err)
 			return
@@ -254,6 +312,43 @@ func (service *trashService) purge(w http.ResponseWriter, r *http.Request) {
 		}
 		if hasOrders {
 			http.Error(w, "la variante aparece en pedidos históricos y no puede borrarse definitivamente", http.StatusConflict)
+			return
+		}
+		if _, err := tx.Exec(r.Context(), `SET LOCAL xpander.allow_stock_purge = 'on'`); err != nil {
+			serverError(w, "authorize test inventory purge", err)
+			return
+		}
+		if _, err := tx.Exec(r.Context(), `DELETE FROM stock_movements WHERE variant_id=$1`, id); err != nil {
+			trashError(w, "delete variant inventory history", err)
+			return
+		}
+		if _, err := tx.Exec(r.Context(), `DELETE FROM branch_stock WHERE variant_id=$1`, id); err != nil {
+			trashError(w, "delete variant balance", err)
+			return
+		}
+	}
+	if kind == "media" {
+		if err := redactPublicationMedia(r.Context(), tx, id); err != nil {
+			serverError(w, "redact published image", err)
+			return
+		}
+		if _, err := tx.Exec(r.Context(), `UPDATE products SET revision=revision+1, updated_at=now()
+			WHERE id IN (SELECT product_id FROM product_media WHERE media_id=$1)`, id); err != nil {
+			serverError(w, "update products using media", err)
+			return
+		}
+		if _, err := tx.Exec(r.Context(), `UPDATE pages SET draft_revision=draft_revision+1, updated_at=now()
+			WHERE id IN (SELECT s.page_id FROM page_sections s JOIN page_section_media sm
+			ON sm.section_id=s.id WHERE sm.media_id=$1)`, id); err != nil {
+			serverError(w, "update drafts using media", err)
+			return
+		}
+		if _, err := tx.Exec(r.Context(), `DELETE FROM product_media WHERE media_id=$1`, id); err != nil {
+			trashError(w, "unlink media from products", err)
+			return
+		}
+		if _, err := tx.Exec(r.Context(), `DELETE FROM page_section_media WHERE media_id=$1`, id); err != nil {
+			trashError(w, "unlink media from drafts", err)
 			return
 		}
 	}

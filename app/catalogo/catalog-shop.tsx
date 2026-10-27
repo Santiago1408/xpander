@@ -39,6 +39,11 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [branchError, setBranchError] = useState("");
+  const [search, setSearch] = useState("");
+  const [styleFilter, setStyleFilter] = useState("");
+  const [audienceFilter, setAudienceFilter] = useState("");
+  const [brandFilter, setBrandFilter] = useState("");
+  const [colorFilter, setColorFilter] = useState("");
   const pendingRequest = useRef<{ key: string; payload: string } | null>(null);
 
   const variantMap = useMemo(() => {
@@ -97,6 +102,22 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const total = cartLines.reduce((sum, line) => sum + line.quantity * line.variant.priceMinor, 0);
   const selectedBranch = branches.find((branch) => branch.id === pickupBranchId);
+  const filterOptions = useMemo(() => {
+    const values = (field: "style" | "audience" | "brandName" | "color") =>
+      [...new Set(products.map((product) => product[field]).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, "es-BO"));
+    return { styles: values("style"), audiences: values("audience"),
+      brands: values("brandName"), colors: values("color") };
+  }, [products]);
+  const filteredProducts = useMemo(() => {
+    const query = search.trim().toLocaleUpperCase("es-BO");
+    return products.filter((product) =>
+      (!styleFilter || product.style === styleFilter) &&
+      (!audienceFilter || product.audience === audienceFilter) &&
+      (!brandFilter || product.brandName === brandFilter) &&
+      (!colorFilter || product.color === colorFilter) &&
+      (!query || `${product.name} ${product.code} ${product.description}`.toLocaleUpperCase("es-BO").includes(query)));
+  }, [products, search, styleFilter, audienceFilter, brandFilter, colorFilter]);
 
   function updateCart(variantId: number, quantity: number) {
     setReceipt(null); setError("");
@@ -129,15 +150,57 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requestKey: pendingRequest.current.key, ...data }) });
       if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo registrar el pedido.");
-      setReceipt((await response.json()) as Receipt);
+      const saved = (await response.json()) as Receipt;
+      window.localStorage.removeItem(cartStorageKey);
+      setCart([]);
+      pendingRequest.current = null;
+      setReceipt(saved);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "No se pudo registrar el pedido.");
     } finally { setBusy(false); }
   }
 
   return <>
+    <section aria-label="Filtros del catálogo" className="mb-7 rounded-xl border border-zinc-200 bg-white p-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <label className="text-sm">Buscar
+          <input className="mt-1 block w-full rounded-lg border border-zinc-300 p-2" onChange={(event) => setSearch(event.target.value)}
+            placeholder="Nombre o código" type="search" value={search} />
+        </label>
+        <label className="text-sm">Estilo
+          <select className="mt-1 block w-full rounded-lg border border-zinc-300 p-2" onChange={(event) => setStyleFilter(event.target.value)} value={styleFilter}>
+            <option value="">Todos</option>{filterOptions.styles.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </label>
+        <label className="text-sm">Público
+          <select className="mt-1 block w-full rounded-lg border border-zinc-300 p-2" onChange={(event) => setAudienceFilter(event.target.value)} value={audienceFilter}>
+            <option value="">Todos</option>{filterOptions.audiences.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </label>
+        <label className="text-sm">Marca
+          <select className="mt-1 block w-full rounded-lg border border-zinc-300 p-2" onChange={(event) => setBrandFilter(event.target.value)} value={brandFilter}>
+            <option value="">Todas</option>{filterOptions.brands.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </label>
+        <label className="text-sm">Color
+          <select className="mt-1 block w-full rounded-lg border border-zinc-300 p-2" onChange={(event) => setColorFilter(event.target.value)} value={colorFilter}>
+            <option value="">Todos</option>{filterOptions.colors.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-zinc-600">
+        <p>{filteredProducts.length} producto(s)</p>
+        {(search || styleFilter || audienceFilter || brandFilter || colorFilter) &&
+          <button className="underline" onClick={() => {
+            setSearch(""); setStyleFilter(""); setAudienceFilter(""); setBrandFilter(""); setColorFilter("");
+          }} type="button">Limpiar filtros</button>}
+      </div>
+    </section>
+    {filteredProducts.length === 0 && <p className="mb-7 rounded-xl border border-dashed border-zinc-300 p-8 text-zinc-600">
+      No hay productos con esos filtros.
+    </p>}
     <div className="grid gap-7 md:grid-cols-2 xl:grid-cols-3">
-      {products.map((product) => {
+      {filteredProducts.map((product) => {
         const prices = product.variants.map((variant) => variant.priceMinor);
         const lowest = Math.min(...prices);
         return <article className="overflow-hidden rounded-2xl border border-zinc-200 bg-white" key={product.id}>
@@ -181,7 +244,13 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
           <h2 className="text-2xl font-semibold">Carrito</h2>
           <button className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" onClick={() => setCartOpen(false)} type="button">Cerrar</button>
         </div>
-        {cartLines.length === 0 ? <p className="mt-8 text-zinc-600">Tu carrito está vacío.</p> : <>
+        {receipt ? <div className="mt-6 rounded-xl border border-green-200 bg-green-50 p-5">
+          <p className="font-semibold">Pedido {receipt.number} registrado como pendiente</p>
+          <p className="mt-2 text-sm">Total: {money(receipt.totalMinor)}. Ahora abre WhatsApp y envía el mensaje preparado al negocio.</p>
+          <a className="mt-4 inline-block rounded-lg bg-green-700 px-4 py-3 font-medium text-white"
+            href={receipt.whatsappUrl} rel="noopener noreferrer" target="_blank">Abrir WhatsApp para enviar</a>
+          <p className="mt-3 text-xs text-green-900">El pedido quedó guardado aunque cierres WhatsApp. Abrir el enlace no confirma que se haya enviado el mensaje.</p>
+        </div> : cartLines.length === 0 ? <p className="mt-8 text-zinc-600">Tu carrito está vacío.</p> : <>
           <ul className="mt-6 divide-y divide-zinc-200">{cartLines.map((line) => <li className="flex items-start gap-3 py-4" key={line.variantId}>
             <div className="min-w-0 flex-1">
               <p className="font-medium">{line.product.name}</p>
@@ -199,13 +268,7 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
           <p className="mt-3 text-right text-lg font-semibold">Total estimado: {money(total)}</p>
           <p className="mt-2 text-sm text-zinc-600">El servidor confirmará precios y disponibilidad antes de registrar el pedido. El recojo será en la sucursal elegida.</p>
           {error && <p className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-          {receipt ? <div className="mt-6 rounded-xl border border-green-200 bg-green-50 p-5">
-            <p className="font-semibold">Pedido {receipt.number} registrado como pendiente</p>
-            <p className="mt-2 text-sm">Total: {money(receipt.totalMinor)}. Ahora abre WhatsApp y envía el mensaje preparado al negocio.</p>
-            <a className="mt-4 inline-block rounded-lg bg-green-700 px-4 py-3 font-medium text-white"
-              href={receipt.whatsappUrl} rel="noopener noreferrer" target="_blank">Abrir WhatsApp para enviar</a>
-            <p className="mt-3 text-xs text-green-900">El pedido quedó guardado aunque cierres WhatsApp. Abrir el enlace no confirma que se haya enviado el mensaje.</p>
-          </div> : <form className="mt-6 space-y-4 border-t border-zinc-200 pt-6" onSubmit={(event) => void submit(event)}>
+          <form className="mt-6 space-y-4 border-t border-zinc-200 pt-6" onSubmit={(event) => void submit(event)}>
             <h3 className="text-lg font-semibold">Datos para el recojo</h3>
             <label className="block text-sm">Sucursal *
               <select className="mt-1 w-full rounded-lg border border-zinc-300 p-2" disabled={busy} onChange={(event) => setPickupBranchId(Number(event.target.value))} required value={pickupBranchId}>
@@ -229,7 +292,7 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
             </label>
             <button className="w-full rounded-lg bg-zinc-950 px-4 py-3 font-medium text-white disabled:opacity-50"
               disabled={busy || !pickupBranchId} type="submit">{busy ? "Registrando…" : "Registrar pedido"}</button>
-          </form>}
+          </form>
         </>}
       </div>
     </div>}

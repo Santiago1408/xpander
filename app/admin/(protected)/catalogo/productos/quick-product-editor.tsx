@@ -228,6 +228,7 @@ export default function QuickProductEditor() {
           {item.code} · {item.name}</option>)}
       </select>
       <Link className="text-sm underline" href="/admin/catalogo/marcas">Administrar marcas</Link>
+      <Link className="text-sm underline" href="/admin/catalogo/etiquetas">Administrar estilos y público</Link>
       <Link className="text-sm underline" href="/admin/inventario">Ver inventario</Link>
     </div>
     {error && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
@@ -258,16 +259,16 @@ export default function QuickProductEditor() {
                   rows={4} value={draft.description} />
               </label>
               <label className="text-sm">Estilo de ropa (opcional)
-                <input className={inputClass} list="style-suggestions" maxLength={120}
-                  onChange={(event) => changeDraft({ style: upper(event.target.value) })}
-                  placeholder="CASUAL, DEPORTIVA…" value={draft.style} />
-                <Suggestions id="style-suggestions" values={options.styles} />
+                <select className={inputClass} onChange={(event) => changeDraft({ style: event.target.value })} value={draft.style}>
+                  <option value="">Sin estilo</option>
+                  {options.styles.map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
               </label>
               <label className="text-sm">Público (opcional)
-                <input className={inputClass} list="audience-suggestions" maxLength={120}
-                  onChange={(event) => changeDraft({ audience: upper(event.target.value) })}
-                  placeholder="MUJERES, HOMBRES, NIÑOS…" value={draft.audience} />
-                <Suggestions id="audience-suggestions" values={options.audiences} />
+                <select className={inputClass} onChange={(event) => changeDraft({ audience: event.target.value })} value={draft.audience}>
+                  <option value="">Sin público</option>
+                  {options.audiences.map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
               </label>
               <label className="text-sm">Color (opcional)
                 <input className={inputClass} list="color-suggestions" maxLength={120}
@@ -283,7 +284,7 @@ export default function QuickProductEditor() {
                 </select>
               </label>
             </div>
-            <p className="mt-3 text-xs text-zinc-500">Estilo, público y color son textos de la ficha, sin listas independientes. Cada color se registra como producto separado.</p>
+            <p className="mt-3 text-xs text-zinc-500">Los estilos y públicos se administran en su apartado. El color sigue siendo un texto de la ficha; cada color se registra como producto separado.</p>
           </section>
 
           <section className="rounded-xl border border-zinc-200 bg-white p-6">

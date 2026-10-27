@@ -68,6 +68,8 @@ func run() error {
 	}
 	registerLandingRoutes(mux, pool, admin, mediaDir)
 	registerBrandRoutes(mux, pool, admin)
+	registerTermRoutes(mux, pool, admin)
+	registerBranchRoutes(mux, pool, admin)
 	registerProductRoutes(mux, pool, admin)
 	registerQuickCatalogRoutes(mux, pool, admin)
 	registerTrashRoutes(mux, pool, admin, mediaDir)

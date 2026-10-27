@@ -223,6 +223,16 @@ func (service *productService) saveQuick(w http.ResponseWriter, r *http.Request,
 			return
 		}
 	}
+	for _, term := range []struct{ kind, name string }{{"style", input.Style}, {"audience", input.Audience}} {
+		if err := service.checkManagedTerm(r.Context(), tx, term.kind, term.name); err != nil {
+			if errors.Is(err, errUnregisteredTerm) {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			} else {
+				serverError(w, "check managed product term", err)
+			}
+			return
+		}
+	}
 	branchIDs := map[int64]bool{}
 	for _, variant := range input.Variants {
 		for _, entry := range variant.StockEntries {

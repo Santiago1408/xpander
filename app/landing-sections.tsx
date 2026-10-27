@@ -6,6 +6,7 @@ export type LandingMedia = {
   kind: string;
   url: string;
   altText: string;
+  removed?: boolean;
 };
 
 export type LandingSection = {
@@ -26,6 +27,11 @@ export type PublishedLanding = {
 };
 
 function Picture({ image, wide = false }: { image: LandingMedia; wide?: boolean }) {
+  if (image.removed || !image.url) {
+    return <div className={`flex items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-100 p-8 text-center text-sm text-zinc-500 ${wide ? "min-h-64" : "aspect-[4/3]"}`}>
+      Imagen eliminada
+    </div>;
+  }
   return (
     <Image
       alt={image.altText}

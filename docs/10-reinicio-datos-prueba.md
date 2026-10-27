@@ -1,8 +1,8 @@
 # Reiniciar los datos de prueba
 
-Este procedimiento deja vacíos catálogo, marcas, inventario, movimientos, pedidos, contenido de la landing y banco de imágenes. También borra los archivos de imágenes subidas y reinicia los consecutivos de productos y variantes. **Conserva las cuentas administrativas y las sucursales**, necesarias para entrar y volver a registrar stock. Crea un borrador vacío de la página de inicio.
+Este procedimiento deja vacíos catálogo, marcas, estilos, públicos, inventario, movimientos, pedidos, contenido de la landing y banco de imágenes. También borra los archivos de imágenes subidas y reinicia los consecutivos de productos y variantes. **Conserva las cuentas administrativas y las sucursales**, necesarias para entrar y volver a registrar stock. Crea un borrador vacío de la página de inicio.
 
-Desde la raíz del repositorio, primero aplica la migración `011` y detén la API para que nadie cargue imágenes mientras se limpia el volumen:
+Desde la raíz del repositorio, primero aplica las migraciones hasta la `014` y detén la API para que nadie cargue imágenes mientras se limpia el volumen:
 
 ```sh
 sudo docker compose -f compose.dev.yaml up --build -d

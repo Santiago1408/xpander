@@ -17,11 +17,15 @@ export default function AdminHomePage() {
         <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
           href="/admin/catalogo/marcas">Marcas</Link>
         <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
+          href="/admin/catalogo/etiquetas">Estilos y público</Link>
+        <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
           href="/admin/medios">Banco de imágenes</Link>
         <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
           href="/admin/papelera">Papelera</Link>
         <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
           href="/admin/inventario">Inventario</Link>
+        <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
+          href="/admin/sucursales">Sucursal activa</Link>
         <Link className="inline-block rounded-lg border border-zinc-300 px-5 py-3 font-medium"
           href="/admin/pedidos">Pedidos</Link>
       </div>

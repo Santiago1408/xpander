@@ -9,7 +9,7 @@
 - Estados operativos iniciales de pedido: pendiente y confirmado. Abrir WhatsApp no prueba que el mensaje se haya enviado.
 - El panel permite administrar todo el contenido de secciones predefinidas de la landing, incluidas imágenes; también ordenarlas, ocultarlas y publicarlas.
 - Inventario inicialmente vacío. Un administrador al comienzo, con modelo preparado para más usuarios y sucursales.
-- Las marcas se administran en el panel. Estilo, público y color son textos de cada producto; cada variante tiene talla alfabética, numérica o ambas.
+- Las marcas, estilos y públicos se administran en el panel. El color es un texto de cada producto; cada variante tiene talla alfabética, numérica o ambas.
 
 ## Arquitectura elegida
 
@@ -23,7 +23,7 @@
 ## Modelo inicial
 
 - `users`, `user_sessions`, `branches`, `user_branch_access`: un administrador y una sucursal iniciales, sin impedir expansión.
-- `brands`: marcas administrables. Estilo, público y color se guardan en la ficha; las tallas se guardan en cada variante.
+- `brands`, `catalog_terms`: marcas, estilos y públicos administrables. El color se guarda en la ficha y las tallas en cada variante.
 - `products`, `product_variants`, `product_media`: ficha comercial, SKU por combinación vendible, precio de venta y medios.
 - `stock_movements`, `branch_stock`: entradas, ajustes y salidas auditables por variante y sucursal. El costo de compra se registra en cada entrada.
 - `site_settings`, `pages`, `page_sections`, `media`: ajustes globales y contenido editable de la web, orden, visibilidad y referencias a imágenes o videos.

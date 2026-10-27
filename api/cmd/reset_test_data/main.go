@@ -43,8 +43,8 @@ func run() error {
 	}
 	defer conn.Close(context.Background())
 	var version int
-	if err := conn.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version < 11 {
-		return errors.New("apply migration 011 before resetting test data")
+	if err := conn.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version < 14 {
+		return errors.New("apply migration 014 before resetting test data")
 	}
 	tx, err := conn.Begin(ctx)
 	if err != nil {
@@ -53,7 +53,7 @@ func run() error {
 	defer tx.Rollback(context.Background())
 	_, err = tx.Exec(ctx, `TRUNCATE TABLE
 		stock_movements, branch_stock, order_items, orders,
-		product_media, product_variants, products, brands,
+		product_media, product_variants, products, brands, catalog_terms,
 		page_publication_media, page_publications, page_section_media,
 		page_sections, pages, media, site_settings RESTART IDENTITY`)
 	if err != nil {

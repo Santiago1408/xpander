@@ -45,13 +45,37 @@ func (service *productService) quickOptions(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	result := quickOptions{Styles: []string{}, Audiences: []string{}, Colors: []string{}}
-	rows, err := service.pool.Query(r.Context(), `SELECT style_label, audience_label, color_label
-		FROM products WHERE deleted_at IS NULL ORDER BY id`)
+	rows, err := service.pool.Query(r.Context(), `SELECT kind, name FROM catalog_terms ORDER BY kind, name`)
 	if err != nil {
-		serverError(w, "list product suggestions", err)
+		serverError(w, "list managed product terms", err)
 		return
 	}
-	seenStyle, seenAudience, seenColor := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	for rows.Next() {
+		var kind, name string
+		if err := rows.Scan(&kind, &name); err != nil {
+			rows.Close()
+			serverError(w, "scan managed product term", err)
+			return
+		}
+		if kind == "style" {
+			result.Styles = append(result.Styles, name)
+		} else {
+			result.Audiences = append(result.Audiences, name)
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		serverError(w, "list managed product terms", err)
+		return
+	}
+	rows, err = service.pool.Query(r.Context(), `SELECT color_label FROM products
+		WHERE deleted_at IS NULL ORDER BY id`)
+	if err != nil {
+		serverError(w, "list product colors", err)
+		return
+	}
+	seenColor := map[string]bool{}
 	appendTerm := func(items []string, seen map[string]bool, raw string) []string {
 		key := catalogKey(raw)
 		if key == "" || seen[key] {
@@ -61,14 +85,12 @@ func (service *productService) quickOptions(w http.ResponseWriter, r *http.Reque
 		return append(items, displayLabel(raw))
 	}
 	for rows.Next() {
-		var style, audience, color string
-		if err := rows.Scan(&style, &audience, &color); err != nil {
+		var color string
+		if err := rows.Scan(&color); err != nil {
 			rows.Close()
 			serverError(w, "scan product suggestions", err)
 			return
 		}
-		result.Styles = appendTerm(result.Styles, seenStyle, style)
-		result.Audiences = appendTerm(result.Audiences, seenAudience, audience)
 		result.Colors = appendTerm(result.Colors, seenColor, color)
 	}
 	err = rows.Err()

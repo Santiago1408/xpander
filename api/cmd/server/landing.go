@@ -29,6 +29,7 @@ type landingMedia struct {
 	Kind    string `json:"kind"`
 	URL     string `json:"url"`
 	AltText string `json:"altText"`
+	Removed bool   `json:"removed,omitempty"`
 }
 
 type landingSection struct {

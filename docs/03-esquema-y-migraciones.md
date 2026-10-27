@@ -10,7 +10,7 @@ Las migraciones SQL están en `api/internal/migrations/sql/`. El programa `api/c
 | --- | --- | --- |
 | Administración | `users`, `user_sessions`, `branches`, `user_branch_access` | Acceso por nombre de usuario y contraseña; correo opcional y nunca identificador de inicio de sesión. Un propietario global y, más adelante, personal asignado a sucursales. Las sesiones guardan solo el hash del token. No hay cuenta ni contraseña predeterminadas. |
 | Contenido | `site_settings`, `media`, `pages`, `page_sections`, `page_section_media`, `page_publications`, `page_publication_media` | Ajustes operativos y borrador editable, más publicaciones inmutables con historial. Una sección eliminada conserva sus datos para restaurarse. Los valores flexibles se validan en la API. |
-| Catálogo | `brands`, `products`, `product_variants`, `product_media` | La marca se administra por separado; estilo, público y color son campos de la ficha. Cada variante registra talla alfabética, numérica o ambas. |
+| Catálogo | `brands`, `catalog_terms`, `products`, `product_variants`, `product_media` | Marca, estilo y público se administran por separado; el color es un campo de la ficha. Cada variante registra talla alfabética, numérica o ambas. |
 | Pedidos | `orders`, `order_items` | Recojo en tienda, identificador idempotente por solicitud y copia histórica de sucursal, producto, talla, SKU y precio. El pedido se guarda antes de abrir WhatsApp; eso no demuestra que el mensaje se envió. |
 | Inventario | `branch_stock`, `stock_movements` | Existencia por sucursal y variante; compras con costo unitario, ajustes y salidas por venta. Los movimientos son append-only y actualizan el saldo mediante trigger. |
 
@@ -20,7 +20,7 @@ No se crean marcas, productos, medios, sucursales ni usuarios ficticios. El inve
 
 Las [fichas y variantes](07-productos-y-catalogo.md) se registran desde una sola pantalla. Las [marcas](06-marcas-y-tallas.md) tienen un apartado propio.
 
-Las migraciones `004`, `005` y `006` incorporan el [acceso por usuario y el editor de la landing](04-editor-landing.md). La `007` añade la revisión del producto; la `008`, la papelera restaurable; la `009`, la clave de solicitud del inventario; la `010`, los códigos numéricos; la `011`, la simplificación del catálogo y los dos campos de talla; la `012`, la huella de la solicitud de pedido y el usuario que confirma; y la `013`, corrige las salidas de stock. No se modifican migraciones aplicadas. La limpieza de datos de prueba se ejecuta [por separado](10-reinicio-datos-prueba.md).
+Las migraciones `004` a `013` incorporan el acceso, la landing, el catálogo simplificado, el inventario y los pedidos. La `014` registra estilos de ropa y públicos administrables a partir de los productos existentes. La `015` permite retirar el historial de inventario cuando se elimina definitivamente un producto de prueba sin pedidos. No se modifican migraciones aplicadas. La limpieza de datos de prueba se ejecuta [por separado](10-reinicio-datos-prueba.md).
 
 ## Reglas e invariantes
 
@@ -43,7 +43,7 @@ sudo docker compose -f compose.dev.yaml exec -T database psql -U xpander -d xpan
 sudo docker compose -f compose.dev.yaml exec -T database psql -U xpander -d xpander -c '\dt'
 ```
 
-Debes ver trece versiones aplicadas (`001_foundation.sql` a `013_stock_outflow.sql`) y las tablas correspondientes. Repetir `up --build -d` no debe duplicarlas. Si el servicio `migrate` falla, consulta sus registros antes de intentar cambios manuales en la base.
+Debes ver quince versiones aplicadas (`001_foundation.sql` a `015_inventory_purge.sql`) y las tablas correspondientes. Repetir `up --build -d` no debe duplicarlas. Si el servicio `migrate` falla, consulta sus registros antes de intentar cambios manuales en la base.
 
 Para ejecutar explícitamente el migrador después de añadir una nueva migración:
 

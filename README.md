@@ -23,7 +23,7 @@ La [guía del editor de la landing](docs/04-editor-landing.md) explica cómo edi
 
 La [guía de acceso administrativo](docs/05-acceso-admin.md) explica cómo crear la primera cuenta y sucursal y probar `/admin` sin poner contraseñas en el repositorio.
 
-La ficha de producto incluye tallas alfabéticas y numéricas, precios e inventario por sucursal. Las [marcas](docs/06-marcas-y-tallas.md) se administran en un apartado propio.
+La ficha de producto incluye tallas alfabéticas y numéricas, precios e inventario por sucursal. Las [marcas, los estilos y los públicos](docs/06-marcas-y-tallas.md) se administran en apartados propios.
 
 La [guía de productos](docs/07-productos-y-catalogo.md) describe cómo crear fichas y variantes, y cómo comprobar su publicación en `/catalogo`.
 
@@ -31,5 +31,7 @@ El [banco de imágenes y la papelera](docs/08-identificadores-y-papelera.md) per
 El [inventario inicial y la evaluación del QR](docs/09-inventario-y-qr.md) describen la carga por variante y las condiciones para añadir pagos manuales.
 
 El [carrito y los pedidos por WhatsApp](docs/11-carrito-y-pedidos.md) explican cómo registrar y confirmar solicitudes sin pasarela de pago.
+
+La [verificación del catálogo, la sucursal, el carrito y la papelera](docs/12-verificacion-catalogo-sucursal-papelera.md) cubre las migraciones y los flujos de administración recientes.
 
 Para empezar las pruebas con catálogo, pedidos, contenido e imágenes vacíos conservando la cuenta y las sucursales, sigue el [reinicio de datos de prueba](docs/10-reinicio-datos-prueba.md).
