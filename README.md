@@ -28,7 +28,7 @@ La ficha de producto incluye tallas alfabéticas y numéricas, precios e inventa
 La [guía de productos](docs/07-productos-y-catalogo.md) describe cómo crear fichas y variantes, y cómo comprobar su publicación en `/catalogo`.
 
 El [banco de imágenes y la papelera](docs/08-identificadores-y-papelera.md) permiten reutilizar imágenes y restaurar elementos retirados del panel.
-El [inventario inicial y la evaluación del QR](docs/09-inventario-y-qr.md) describen la carga por variante y las condiciones para añadir pagos manuales.
+El [inventario inicial y el pago manual por QR](docs/09-inventario-y-qr.md) describen la carga por variante, el QR vigente, los comprobantes y la verificación bancaria.
 
 El [carrito y los pedidos por WhatsApp](docs/11-carrito-y-pedidos.md) explican cómo registrar y confirmar solicitudes sin pasarela de pago.
 

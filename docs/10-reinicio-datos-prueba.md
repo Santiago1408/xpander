@@ -1,8 +1,8 @@
 # Reiniciar los datos de prueba
 
-Este procedimiento deja vacíos catálogo, marcas, estilos, públicos, inventario, movimientos, pedidos, contenido de la landing y banco de imágenes. También borra los archivos de imágenes subidas y reinicia los consecutivos de productos y variantes. **Conserva las cuentas administrativas y las sucursales**, necesarias para entrar y volver a registrar stock. Crea un borrador vacío de la página de inicio.
+Este procedimiento deja vacíos catálogo, marcas, estilos, públicos, inventario, movimientos, pedidos, comprobantes de pago, contenido de la landing y banco de imágenes. También borra las imágenes y los comprobantes cargados y reinicia los consecutivos de productos y variantes. **Conserva las cuentas administrativas y las sucursales**, necesarias para entrar y volver a registrar stock. Crea un borrador vacío de la página de inicio.
 
-Desde la raíz del repositorio, primero aplica las migraciones hasta la `017` y detén la API para que nadie cargue imágenes mientras se limpia el volumen:
+Desde la raíz del repositorio, primero aplica las migraciones hasta la `020` y detén la API para que nadie cargue imágenes o comprobantes mientras se limpia el volumen:
 
 ```sh
 sudo docker compose -f compose.dev.yaml up --build -d
@@ -12,7 +12,7 @@ sudo docker compose -f compose.dev.yaml run --rm --no-deps api go run ./cmd/rese
 sudo docker compose -f compose.dev.yaml up -d api
 ```
 
-El comando de reinicio es explícito e idempotente; no se ejecuta automáticamente durante una migración. Elimina los archivos cargados dentro del volumen `media_data`, incluidos archivos sin registro que tengan el formato de nombre generado por la aplicación. Los recursos de diseño del repositorio, como el logo original, no se borran.
+El comando de reinicio es explícito e idempotente; no se ejecuta automáticamente durante una migración. Elimina las imágenes y los comprobantes de `media_data`, incluidos archivos sin registro que tengan el formato de nombre generado por la aplicación. Los recursos de diseño del repositorio, como el logo original, no se borran.
 
 Para comprobar la base:
 

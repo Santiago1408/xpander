@@ -20,6 +20,24 @@ type QRProfile = { qrUrl: string; qrExpiresOn: string };
 const cartStorageKey = "xpander_cart_v1";
 const pendingQRKey = "xpander_pending_qr_order_v1";
 
+function savedQRReceipts(): Receipt[] {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(pendingQRKey) || "[]") as unknown;
+    const values = Array.isArray(raw) ? raw : [raw];
+    return values.filter((value): value is Receipt => typeof value === "object" && value !== null &&
+      Number.isSafeInteger(value.id) && value.id > 0 && value.paymentMethod === "qr" &&
+      typeof value.accessToken === "string" && value.accessToken.length > 0);
+  } catch { return []; }
+}
+
+function rememberQR(receipt: Receipt | null, removeId?: number): Receipt[] {
+  const current = savedQRReceipts().filter((item) => item.id !== (receipt?.id ?? removeId));
+  if (receipt) current.push(receipt);
+  try { window.localStorage.setItem(pendingQRKey, JSON.stringify(current.slice(-20))); }
+  catch { /* The order still exists if browser storage is unavailable. */ }
+  return current.slice(-20);
+}
+
 function money(minor: number): string {
   const whole = Math.floor(minor / 100).toLocaleString("es-BO");
   return `Bs ${whole},${String(minor % 100).padStart(2, "0")}`;
@@ -39,6 +57,7 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerNote, setCustomerNote] = useState("");
   const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [savedOrders, setSavedOrders] = useState<Receipt[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<"whatsapp" | "qr">("whatsapp");
   const [qrProfile, setQRProfile] = useState<QRProfile | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
@@ -112,15 +131,25 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
         if (profile.qrUrl) setQRProfile(profile);
       } catch { /* Ordering by WhatsApp remains available. */ }
     })();
-    try {
-      const stored = window.sessionStorage.getItem(pendingQRKey);
-      if (stored) {
-        const previous = JSON.parse(stored) as Receipt;
-        if (previous.id > 0 && previous.paymentMethod === "qr" && previous.accessToken) {
-          setReceipt(previous); setCartOpen(true);
+    const timer = window.setTimeout(() => {
+      try {
+        const saved = savedQRReceipts();
+        setSavedOrders(saved);
+        const previous = saved.at(-1);
+        if (previous) {
+            setReceipt(previous); setCartOpen(true);
+            void fetch(`/api/orders/${previous.id}/payment`, { cache: "no-store",
+              headers: { "X-Order-Token": previous.accessToken } }).then(async (response) => {
+                if (!response.ok) return;
+                const current = (await response.json()) as { status: string; paymentStatus: string };
+                setReceipt({ ...previous, status: current.status, paymentStatus: current.paymentStatus });
+                if (current.paymentStatus === "verified" || current.status === "confirmed")
+                  setSavedOrders(rememberQR(null, previous.id));
+              }).catch(() => undefined);
         }
-      }
-    } catch { window.sessionStorage.removeItem(pendingQRKey); }
+      } catch { setSavedOrders([]); }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const cartLines = cart.flatMap((item) => {
@@ -184,7 +213,16 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
       setCart([]);
       pendingRequest.current = null;
       setReceipt(saved);
-      if (saved.paymentMethod === "qr") window.sessionStorage.setItem(pendingQRKey, JSON.stringify(saved));
+      if (saved.paymentMethod === "qr") {
+        setSavedOrders(rememberQR(saved));
+        try {
+          const currentQR = await fetch("/api/business", { cache: "no-store" });
+          if (currentQR.ok) {
+            const profile = (await currentQR.json()) as QRProfile;
+            setQRProfile(profile.qrUrl ? profile : null);
+          }
+        } catch { setQRProfile(null); }
+      }
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "No se pudo registrar el pedido.");
     } finally { setBusy(false); }
@@ -200,11 +238,29 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
       const response = await fetch(`/api/orders/${receipt.id}/receipt`, { method: "POST",
         headers: { "X-Order-Token": receipt.accessToken }, body });
       if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo subir el comprobante.");
-      setReceipt({ ...receipt, paymentStatus: "submitted" });
-      window.sessionStorage.removeItem(pendingQRKey);
+      const result = (await response.json()) as { paymentStatus: string; whatsappUrl: string };
+      const updated = { ...receipt, paymentStatus: result.paymentStatus, whatsappUrl: result.whatsappUrl };
+      setReceipt(updated);
+      setSavedOrders(rememberQR(updated));
       setProofFile(null);
     } catch (failure) { setProofError(failure instanceof Error ? failure.message : "No se pudo subir el comprobante."); }
     finally { setProofBusy(false); }
+  }
+
+  async function refreshPayment() {
+    if (!receipt) return;
+    setProofError("");
+    try {
+      const response = await fetch(`/api/orders/${receipt.id}/payment`, { cache: "no-store",
+        headers: { "X-Order-Token": receipt.accessToken } });
+      if (!response.ok) throw new Error("No se pudo consultar el pago.");
+      const current = (await response.json()) as { status: string; paymentStatus: string };
+      const updated = { ...receipt, status: current.status, paymentStatus: current.paymentStatus };
+      setReceipt(updated);
+      if (current.paymentStatus === "verified" || current.status === "confirmed")
+        setSavedOrders(rememberQR(null, receipt.id));
+      else setSavedOrders(rememberQR(updated));
+    } catch (failure) { setProofError(failure instanceof Error ? failure.message : "No se pudo consultar el pago."); }
   }
 
   return <>
@@ -291,13 +347,22 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
           <h2 className="text-2xl font-semibold">Carrito</h2>
           <button className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" onClick={() => setCartOpen(false)} type="button">Cerrar</button>
         </div>
+        {savedOrders.length > 0 && <div className="mt-5 rounded-lg border border-zinc-200 p-3 text-sm">
+          <p className="font-medium">Pedidos QR pendientes de seguimiento</p>
+          <div className="mt-2 flex flex-wrap gap-2">{savedOrders.map((order) => <button
+            className="rounded border border-zinc-300 px-2 py-1 disabled:bg-zinc-100" disabled={receipt?.id === order.id}
+            key={order.id} onClick={() => { setReceipt(order); setProofError(""); }} type="button">{order.number}</button>)}</div>
+        </div>}
         {receipt ? <div className="mt-6 rounded-xl border border-green-200 bg-green-50 p-5">
-          <p className="font-semibold">Pedido {receipt.number} registrado como pendiente</p>
+          <p className="font-semibold">Pedido {receipt.number} {receipt.status === "confirmed" ? "confirmado" : "registrado como pendiente"}</p>
           <p className="mt-2 text-sm">Total: {money(receipt.totalMinor)}.</p>
           {receipt.paymentMethod === "qr" && <div className="mt-5 rounded-lg border border-green-200 bg-white p-4">
             <h3 className="font-semibold">Transferencia por QR</h3>
-            {receipt.paymentStatus === "submitted" ?
+            {receipt.paymentStatus === "verified" ?
+              <p className="mt-2 text-sm">El administrador verificó el abono. El pedido seguirá su proceso de confirmación y recojo.</p> :
+              receipt.paymentStatus === "submitted" ?
               <p className="mt-2 text-sm">Comprobante recibido. El administrador verificará el abono en su banca antes de confirmar el pedido.</p> : <>
+                {receipt.paymentStatus === "rejected" && <p className="mt-2 text-sm text-red-700">El comprobante anterior fue rechazado. Consulta con el negocio y sube uno nuevo si corresponde.</p>}
                 {qrProfile?.qrUrl ? <>
                   <p className="mt-2 text-sm">Escanea o descarga el QR vigente. Transfiere el total exacto y comprueba el beneficiario en tu aplicación bancaria.</p>
                   <Image alt="QR de transferencia vigente" className="mx-auto mt-4 max-h-72 w-auto rounded-lg border object-contain"
@@ -312,15 +377,17 @@ export default function CatalogShop({ products }: { products: CatalogProduct[] }
                   </label>
                   <button className="rounded-lg bg-zinc-950 px-4 py-2 text-sm text-white disabled:opacity-50"
                     disabled={!proofFile || proofBusy} type="submit">{proofBusy ? "Subiendo…" : "Enviar comprobante"}</button>
-                  {proofError && <p className="text-sm text-red-700" role="alert">{proofError}</p>}
                 </form>
               </>}
+            {proofError && <p className="mt-3 text-sm text-red-700" role="alert">{proofError}</p>}
+            <button className="mt-4 text-sm text-blue-800 underline" onClick={() => void refreshPayment()}
+              type="button">Consultar estado del pago</button>
           </div>}
           <p className="mt-4 text-sm">Abre WhatsApp y envía el detalle del pedido al negocio.</p>
           <a className="mt-4 inline-block rounded-lg bg-green-700 px-4 py-3 font-medium text-white"
             href={receipt.whatsappUrl} rel="noopener noreferrer" target="_blank">Abrir WhatsApp para enviar</a>
           <p className="mt-3 text-xs text-green-900">El pedido quedó guardado aunque cierres WhatsApp. Abrir el enlace no confirma que se haya enviado el mensaje.</p>
-          {receipt.paymentStatus === "submitted" && <button className="mt-4 block text-sm underline" type="button"
+          {receipt.paymentMethod === "qr" && <button className="mt-4 block text-sm underline" type="button"
             onClick={() => setReceipt(null)}>Hacer otro pedido</button>}
         </div> : cartLines.length === 0 ? <p className="mt-8 text-zinc-600">Tu carrito está vacío.</p> : <>
           <ul className="mt-6 divide-y divide-zinc-200">{cartLines.map((line) => <li className="flex items-start gap-3 py-4" key={line.variantId}>

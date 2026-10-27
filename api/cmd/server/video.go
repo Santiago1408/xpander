@@ -17,7 +17,9 @@ var youtubeIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 var vimeoIDPattern = regexp.MustCompile(`^[0-9]{1,12}$`)
 
 func videoEmbedURL(raw string) (string, error) {
-	if !validHTTPSURL(raw) { return "", errors.New("el video debe usar un enlace HTTPS de YouTube o Vimeo") }
+	if !validHTTPSURL(raw) {
+		return "", errors.New("el video debe usar un enlace HTTPS de YouTube o Vimeo")
+	}
 	parsed, _ := url.Parse(raw)
 	host := strings.ToLower(parsed.Hostname())
 	var id string
@@ -26,13 +28,19 @@ func videoEmbedURL(raw string) (string, error) {
 		id = strings.Trim(parsed.Path, "/")
 	case "youtube.com", "www.youtube.com", "m.youtube.com":
 		parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
-		if len(parts) == 1 && parts[0] == "watch" { id = parsed.Query().Get("v") }
-		if len(parts) == 2 && (parts[0] == "shorts" || parts[0] == "embed" || parts[0] == "live") { id = parts[1] }
+		if len(parts) == 1 && parts[0] == "watch" {
+			id = parsed.Query().Get("v")
+		}
+		if len(parts) == 2 && (parts[0] == "shorts" || parts[0] == "embed" || parts[0] == "live") {
+			id = parts[1]
+		}
 	case "vimeo.com", "www.vimeo.com":
 		id = strings.Trim(parsed.Path, "/")
 	case "player.vimeo.com":
 		parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
-		if len(parts) == 2 && parts[0] == "video" { id = parts[1] }
+		if len(parts) == 2 && parts[0] == "video" {
+			id = parts[1]
+		}
 	}
 	if (host == "vimeo.com" || host == "www.vimeo.com" || host == "player.vimeo.com") && vimeoIDPattern.MatchString(id) {
 		return fmt.Sprintf("https://player.vimeo.com/video/%s", id), nil
@@ -45,18 +53,27 @@ func videoEmbedURL(raw string) (string, error) {
 
 func validateVideoConfig(sectionType string, config videoConfig) error {
 	if sectionType != "video" {
-		if config.URL != "" || config.EmbedURL != "" { return errors.New("el enlace de video solo corresponde a una sección de video") }
+		if config.URL != "" || config.EmbedURL != "" {
+			return errors.New("el enlace de video solo corresponde a una sección de video")
+		}
 		return nil
 	}
-	if config.URL == "" { return nil } // Incomplete drafts may be saved.
+	if config.URL == "" {
+		return nil
+	} // Incomplete drafts may be saved.
 	_, err := videoEmbedURL(config.URL)
 	return err
 }
 
 func normalizeVideoConfig(config *videoConfig) error {
-	if config.URL == "" { config.EmbedURL = ""; return nil }
+	if config.URL == "" {
+		config.EmbedURL = ""
+		return nil
+	}
 	embed, err := videoEmbedURL(config.URL)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	config.EmbedURL = embed
 	return nil
 }

@@ -36,6 +36,11 @@ func TestCheckoutNormalizesForIdempotency(t *testing.T) {
 	if checkoutFingerprint(first) == checkoutFingerprint(second) {
 		t.Fatal("different quantities should not reuse a request key")
 	}
+	second = first
+	second.PaymentMethod = "qr"
+	if checkoutFingerprint(first) == checkoutFingerprint(second) {
+		t.Fatal("changing the payment method must not reuse a request key")
+	}
 }
 
 func TestCheckoutRejectsDuplicateOrInvalidItems(t *testing.T) {

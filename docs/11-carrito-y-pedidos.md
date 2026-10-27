@@ -43,4 +43,4 @@ sudo docker compose -f compose.dev.yaml exec -T database psql -U xpander -d xpan
 
 La cantidad disponible debe ser al menos la solicitada **para cada línea en la sucursal del pedido**. Si no lo es, la confirmación se rechazará correctamente.
 
-En esta versión, los únicos estados usados por la interfaz son **pendiente** y **confirmado**. El pago por QR y los comprobantes siguen fuera de este flujo; su estrategia está en [inventario y QR](09-inventario-y-qr.md).
+Los estados del pedido siguen siendo **pendiente** y **confirmado**. El pago por QR tiene estados separados; un pedido QR requiere un abono verificado manualmente antes de confirmarse. Consulta [inventario y QR](09-inventario-y-qr.md).

@@ -15,6 +15,7 @@ import (
 )
 
 var uploadedImageName = regexp.MustCompile(`^[a-f0-9]{32}\.(jpg|png)$`)
+var uploadedProofName = regexp.MustCompile(`^[a-f0-9]{32}\.(jpg|png|pdf)$`)
 
 func main() {
 	if err := run(); err != nil {
@@ -43,8 +44,8 @@ func run() error {
 	}
 	defer conn.Close(context.Background())
 	var version int
-	if err := conn.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version < 19 {
-		return errors.New("apply migration 019 before resetting test data")
+	if err := conn.QueryRow(ctx, `SELECT max(version) FROM schema_migrations`).Scan(&version); err != nil || version < 20 {
+		return errors.New("apply migration 020 before resetting test data")
 	}
 	tx, err := conn.Begin(ctx)
 	if err != nil {
@@ -93,6 +94,20 @@ func run() error {
 		}
 		if err := os.Remove(filepath.Join(mediaDir, entry.Name())); err != nil {
 			return fmt.Errorf("remove uploaded image %q: %w", entry.Name(), err)
+		}
+		removed++
+	}
+	proofDir := filepath.Join(mediaDir, "payment_proofs")
+	proofs, err := os.ReadDir(proofDir)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read payment proof directory: %w", err)
+	}
+	for _, entry := range proofs {
+		if entry.IsDir() || !uploadedProofName.MatchString(entry.Name()) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(proofDir, entry.Name())); err != nil {
+			return fmt.Errorf("remove payment proof %q: %w", entry.Name(), err)
 		}
 		removed++
 	}

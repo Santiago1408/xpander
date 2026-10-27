@@ -9,7 +9,7 @@ sudo docker compose -f compose.dev.yaml up -d --no-deps --force-recreate api
 sudo docker compose -f compose.dev.yaml exec -T database psql -U xpander -d xpander -c 'SELECT version,name FROM schema_migrations WHERE version >= 14 ORDER BY version;'
 ```
 
-La consulta debe mostrar las migraciones 014 a 017. Inicia Next con `npm run dev` si aún no está abierto.
+La consulta debe mostrar las migraciones 014 a 020. Inicia Next con `npm run dev` si aún no está abierto.
 
 ## 1. Estilos y público
 
@@ -41,9 +41,21 @@ Si una acción falla, copia el mensaje del panel y consulta `sudo docker compose
 
 ## 5. Contacto, mapa y QR
 
-1. En `/admin/contenido`, agrega o edita una sección **Contacto**. Completa Instagram y otro enlace social HTTPS, el enlace para abrir la ubicación de Google Maps y la URL `src` del mapa insertable. Guarda el borrador. La landing pública todavía debe conservar la versión anterior; la vista previa ya muestra iconos y mapa.
+1. En `/admin/contenido`, agrega o edita una sección **Contacto**. Completa Instagram y otro enlace social HTTPS. En Google Maps usa **Compartir → Incorporar un mapa → Copiar HTML** y pega en el único campo de ubicación la URL `src` del iframe. Guarda el borrador. La landing pública todavía debe conservar la versión anterior; la vista previa ya muestra los iconos y el mapa en el pie de página.
 2. Pulsa **Publicar**. La landing pública debe mostrar solo los enlaces completados. Al pulsar el mapa se abre la ubicación en una pestaña nueva.
-3. En `/admin/negocio`, cambia el teléfono y una red social; sube o selecciona una imagen PNG/JPEG para el QR y guarda. Recarga: los valores se mantienen. Abre `/api/business` y comprueba que devuelve el teléfono, la red y una `qrUrl` pública. El QR público debe abrirse; al quitar el QR y guardar, `qrMediaId` queda vacío.
+3. En `/admin/negocio`, cambia el teléfono y una red social; sube o selecciona una imagen PNG/JPEG para el QR, indica su vencimiento y guarda. Recarga: los valores se mantienen. Abre `/api/business` y comprueba que devuelve el teléfono, la red, una `qrUrl` pública y la fecha de vencimiento. El QR público debe abrirse; al quitar el QR y guardar, `qrMediaId` queda vacío.
 4. Vuelve a activar un QR, envía esa imagen a la papelera y elimínala definitivamente. La configuración del negocio debe perder la referencia al QR y la URL antigua debe responder 404.
 
-La imagen del QR queda preparada para el futuro flujo de transferencia. Subirla por sí solo no registra comprobantes ni confirma pagos.
+## 6. Videos y destacados
+
+1. En `/admin/contenido`, agrega un bloque **Video** y pega un enlace de YouTube o Vimeo. Guarda y publica. La vista previa y la landing deben mostrar el reproductor. Un enlace de otro dominio debe rechazarse.
+2. Agrega un bloque **Productos destacados** y publícalo. Marca una ficha activa como **Destacado** en `/admin/catalogo/productos`; debe aparecer en la landing con su imagen y precio actuales. Quita la marca y comprueba que desaparece sin volver a publicar el bloque.
+
+## 7. Pago por QR y comprobante
+
+1. Con un QR vigente, añade una variante con stock al carrito. Elige **Transferir por QR y subir comprobante**, registra el pedido y comprueba que el carrito se vacía. El total, el QR y el botón de WhatsApp deben mostrarse.
+2. Descarga el QR y sube un comprobante de prueba PNG, JPEG o PDF. El cliente verá «Comprobante recibido», sin ninguna afirmación de pago confirmado. Recarga la página y consulta el estado del pago.
+3. En `/admin/pedidos`, descarga el comprobante. Antes de pulsar **Verifiqué el abono en mi banca**, comprueba que el pedido no puede confirmarse. Para una prueba sin dinero real, usa **Rechazar comprobante**: el cliente podrá consultar el rechazo y subir otro. El botón de verificación solo debe usarse después de comprobar un abono real.
+4. Comprueba que el QR caducado deja de aparecer en `/api/business` y no puede elegirse para un pedido nuevo. Renovarlo requiere reemplazar la imagen y la fecha en `/admin/negocio`.
+
+Subir un comprobante no confirma el abono. No uses el botón de verificación como parte de una prueba ficticia en una cuenta con pedidos reales.

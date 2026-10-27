@@ -4,7 +4,7 @@ import "testing"
 
 func TestContactConfigRejectsUnsafeLinksAndIncompleteMap(t *testing.T) {
 	tests := []struct {
-		name string
+		name   string
 		config contactConfig
 	}{
 		{"script social link", contactConfig{SocialLinks: map[string]string{"instagram": "javascript:alert(1)"}}},

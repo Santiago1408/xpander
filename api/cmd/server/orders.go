@@ -41,14 +41,14 @@ type checkoutInput struct {
 }
 
 type orderReceipt struct {
-	ID          int64  `json:"id"`
-	Number      string `json:"number"`
-	Status      string `json:"status"`
-	TotalMinor  int64  `json:"totalMinor"`
-	WhatsAppURL string `json:"whatsappUrl"`
+	ID            int64  `json:"id"`
+	Number        string `json:"number"`
+	Status        string `json:"status"`
+	TotalMinor    int64  `json:"totalMinor"`
+	WhatsAppURL   string `json:"whatsappUrl"`
 	PaymentMethod string `json:"paymentMethod"`
 	PaymentStatus string `json:"paymentStatus"`
-	AccessToken string `json:"accessToken"`
+	AccessToken   string `json:"accessToken"`
 }
 
 type orderLine struct {
@@ -64,7 +64,7 @@ type orderService struct {
 	pool           *pgxpool.Pool
 	admin          *adminAuth
 	whatsAppNumber string
-	mediaDir string
+	mediaDir       string
 }
 
 var errOrderKeyReuse = errors.New("la clave de este pedido ya se usó con otros datos")
@@ -95,8 +95,12 @@ func registerOrderRoutes(mux *http.ServeMux, pool *pgxpool.Pool, admin *adminAut
 }
 
 func normalizeCheckout(input *checkoutInput) error {
-	if input.PaymentMethod == "" { input.PaymentMethod = "whatsapp" }
-	if input.PaymentMethod != "whatsapp" && input.PaymentMethod != "qr" { return errors.New("método de pago inválido") }
+	if input.PaymentMethod == "" {
+		input.PaymentMethod = "whatsapp"
+	}
+	if input.PaymentMethod != "whatsapp" && input.PaymentMethod != "qr" {
+		return errors.New("método de pago inválido")
+	}
 	input.CustomerName = strings.Join(strings.Fields(input.CustomerName), " ")
 	input.CustomerPhone = strings.TrimSpace(input.CustomerPhone)
 	input.CustomerNote = strings.TrimSpace(input.CustomerNote)
@@ -130,13 +134,26 @@ func normalizeCheckout(input *checkoutInput) error {
 
 func checkoutFingerprint(input checkoutInput) string {
 	payload := struct {
-		PaymentMethod string `json:"paymentMethod"`
+		PaymentMethod  string         `json:"paymentMethod"`
 		PickupBranchID int64          `json:"pickupBranchId"`
 		CustomerName   string         `json:"customerName"`
 		CustomerPhone  string         `json:"customerPhone"`
 		CustomerNote   string         `json:"customerNote"`
 		Items          []checkoutItem `json:"items"`
 	}{input.PaymentMethod, input.PickupBranchID, input.CustomerName, input.CustomerPhone, input.CustomerNote, input.Items}
+	encoded, _ := json.Marshal(payload)
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:])
+}
+
+func legacyCheckoutFingerprint(input checkoutInput) string {
+	payload := struct {
+		PickupBranchID int64          `json:"pickupBranchId"`
+		CustomerName   string         `json:"customerName"`
+		CustomerPhone  string         `json:"customerPhone"`
+		CustomerNote   string         `json:"customerNote"`
+		Items          []checkoutItem `json:"items"`
+	}{input.PickupBranchID, input.CustomerName, input.CustomerPhone, input.CustomerNote, input.Items}
 	encoded, _ := json.Marshal(payload)
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
@@ -173,7 +190,7 @@ func (service *orderService) listBranches(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, branches)
 }
 
-func existingOrder(ctx context.Context, tx pgx.Tx, requestKey, fingerprint string) (orderReceipt, bool, error) {
+func existingOrder(ctx context.Context, tx pgx.Tx, requestKey, fingerprint, legacyFingerprint string) (orderReceipt, bool, error) {
 	var receipt orderReceipt
 	var previousFingerprint, whatsAppNumber, message string
 	err := tx.QueryRow(ctx, `SELECT id, status, total_minor, whatsapp_number,
@@ -188,7 +205,8 @@ func existingOrder(ctx context.Context, tx pgx.Tx, requestKey, fingerprint strin
 	if err != nil {
 		return receipt, false, err
 	}
-	if previousFingerprint != fingerprint {
+	if previousFingerprint != fingerprint &&
+		!(receipt.PaymentMethod == "whatsapp" && legacyFingerprint != "" && previousFingerprint == legacyFingerprint) {
 		return receipt, true, errOrderKeyReuse
 	}
 	receipt.Number = orderNumber(receipt.ID)
@@ -241,13 +259,17 @@ func (service *orderService) checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fingerprint := checkoutFingerprint(input)
+	legacyFingerprint := ""
+	if input.PaymentMethod == "whatsapp" {
+		legacyFingerprint = legacyCheckoutFingerprint(input)
+	}
 	tx, err := service.pool.Begin(r.Context())
 	if err != nil {
 		serverError(w, "begin checkout", err)
 		return
 	}
 	defer tx.Rollback(context.Background())
-	if receipt, found, err := existingOrder(r.Context(), tx, input.RequestKey, fingerprint); err != nil {
+	if receipt, found, err := existingOrder(r.Context(), tx, input.RequestKey, fingerprint, legacyFingerprint); err != nil {
 		if errors.Is(err, errOrderKeyReuse) {
 			http.Error(w, err.Error(), http.StatusConflict)
 		} else {
@@ -275,8 +297,14 @@ func (service *orderService) checkout(w http.ResponseWriter, r *http.Request) {
 		err = tx.QueryRow(r.Context(), `SELECT EXISTS (SELECT 1 FROM business_profile b
 			JOIN media m ON m.id=b.qr_media_id WHERE b.id=TRUE AND m.deleted_at IS NULL
 			AND b.qr_expires_on >= (now() AT TIME ZONE 'America/La_Paz')::date)`).Scan(&available)
-		if err != nil { serverError(w, "check active payment QR", err); return }
-		if !available { http.Error(w, "el QR no está disponible; elige WhatsApp", http.StatusConflict); return }
+		if err != nil {
+			serverError(w, "check active payment QR", err)
+			return
+		}
+		if !available {
+			http.Error(w, "el QR no está disponible; elige WhatsApp", http.StatusConflict)
+			return
+		}
 	}
 	lines := make([]orderLine, 0, len(input.Items))
 	var total int64
@@ -319,7 +347,9 @@ func (service *orderService) checkout(w http.ResponseWriter, r *http.Request) {
 	var id int64
 	var accessToken string
 	paymentStatus := "not_required"
-	if input.PaymentMethod == "qr" { paymentStatus = "awaiting_receipt" }
+	if input.PaymentMethod == "qr" {
+		paymentStatus = "awaiting_receipt"
+	}
 	err = tx.QueryRow(r.Context(), `INSERT INTO orders
 		(client_request_id, request_fingerprint, pickup_branch_id, pickup_branch_name,
 		pickup_address, pickup_instructions, customer_name, customer_phone, customer_note,
@@ -331,7 +361,7 @@ func (service *orderService) checkout(w http.ResponseWriter, r *http.Request) {
 		input.CustomerName, input.CustomerPhone, input.CustomerNote, total,
 		service.whatsAppNumber, input.PaymentMethod, paymentStatus).Scan(&id, &accessToken)
 	if errors.Is(err, pgx.ErrNoRows) {
-		receipt, found, lookupErr := existingOrder(r.Context(), tx, input.RequestKey, fingerprint)
+		receipt, found, lookupErr := existingOrder(r.Context(), tx, input.RequestKey, fingerprint, legacyFingerprint)
 		if lookupErr != nil {
 			if errors.Is(lookupErr, errOrderKeyReuse) {
 				http.Error(w, lookupErr.Error(), http.StatusConflict)
@@ -371,7 +401,7 @@ func (service *orderService) checkout(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusCreated, orderReceipt{ID: id, Number: orderNumber(id),
 		Status: "pending", TotalMinor: total,
-		WhatsAppURL: orderWhatsAppURL(service.whatsAppNumber, message),
+		WhatsAppURL:   orderWhatsAppURL(service.whatsAppNumber, message),
 		PaymentMethod: input.PaymentMethod, PaymentStatus: paymentStatus, AccessToken: accessToken})
 }
 

@@ -74,6 +74,7 @@ export default function OrdersEditor() {
 
   async function review(order: Order, decision: "verify" | "reject") {
     if (busyId !== null) return;
+    if (decision === "verify" && !window.confirm(`¿Confirmaste en tu banca que ingresó el monto exacto de ${order.number}? El comprobante por sí solo no demuestra el pago.`)) return;
     setBusyId(order.id); setError(""); setNotice("");
     try {
       const response = await fetch(`/api/admin/orders/${order.id}/payment/${decision}`, { method: "POST" });
