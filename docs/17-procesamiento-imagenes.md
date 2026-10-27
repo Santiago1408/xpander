@@ -24,4 +24,8 @@ sudo docker compose -f compose.dev.yaml exec -T database psql -U xpander -d xpan
 
 Envía una foto a la papelera y elimínala definitivamente. Sus filas en `media` y `media_variants` deben desaparecer. Para ver el volumen completo, incluidos archivos sin registro, usa `sudo docker compose -f compose.dev.yaml exec api du -sh /srv/media`.
 
-La cuota total de 40 GB, el video del hero y el procesamiento retroactivo de archivos ya cargados son pasos posteriores. Antes de desplegar la API fuera de `compose.dev.yaml`, instala ImageMagick con soporte WebP en su imagen de producción y conserva el volumen de medios.
+## Límite de almacenamiento
+
+Las subidas desde el panel (fotos, logos y QR) se rechazan con el código 507 cuando el total guardado alcanza `MEDIA_QUOTA_GB` (40 GB por defecto). El total se calcula desde la base: archivos principales, tamaños derivados y comprobantes. Los comprobantes de los clientes cuentan, pero nunca se bloquean para no detener las ventas. `GET /api/admin/media/usage` devuelve el uso y el límite; el Banco de imágenes los muestra en una barra que avisa al 80 %. Para liberar espacio hay que eliminar definitivamente imágenes desde la Papelera.
+
+El video en la portada y el reprocesamiento de fotos subidas antes de la migración 021 quedan fuera por ahora; una instalación nueva no tiene fotos anteriores a la 021. La imagen de producción de la API (`api/Dockerfile`) ya incluye ImageMagick con soporte WebP.

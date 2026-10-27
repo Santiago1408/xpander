@@ -8,6 +8,33 @@ import { ChipRow, EmptyState, FileField, Feedback, Pill, ui } from "../../admin-
 type MediaItem = { id: number; url: string; altText: string; isDeleted: boolean;
   useCount: number; purpose: "photo" | "qr" | "logo"; bytes: number };
 
+type Usage = { usedBytes: number; quotaBytes: number };
+
+// Binary units, as the API counts the limit (MEDIA_QUOTA_GB).
+function formatStorage(bytes: number): string {
+  const format = (value: number) => new Intl.NumberFormat("es-BO", { maximumFractionDigits: 1 }).format(value);
+  if (bytes < 1 << 20) return `${format(bytes / 1024)} kB`;
+  if (bytes < 1 << 30) return `${format(bytes / (1 << 20))} MB`;
+  return `${format(bytes / (1 << 30))} GB`;
+}
+
+function UsageBar({ usage }: { usage: Usage }) {
+  const ratio = usage.quotaBytes > 0 ? usage.usedBytes / usage.quotaBytes : 0;
+  const tone = ratio >= 1 ? "bg-red-700" : ratio >= 0.8 ? "bg-amber-600" : "bg-ink";
+  return <section aria-label="Espacio de almacenamiento" className="flex flex-col gap-2.5 bg-white p-4 sm:px-6">
+    <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+      <span className="font-medium">Espacio usado</span>
+      <span className="font-mono text-[13px]">{formatStorage(usage.usedBytes)} de {formatStorage(usage.quotaBytes)} · {Math.min(100, Math.round(ratio * 100))} %</span>
+    </div>
+    <div aria-valuemax={100} aria-valuemin={0} aria-valuenow={Math.min(100, Math.round(ratio * 100))} className="h-2 bg-mist" role="progressbar">
+      <div className={`h-2 ${tone}`} style={{ width: `${Math.min(100, ratio * 100)}%` }} />
+    </div>
+    {ratio >= 0.8 && <p className={`m-0 text-xs ${ratio >= 1 ? "text-red-800" : "text-amber-900"}`}>{ratio >= 1 ?
+      "Se alcanzó el límite: no se pueden subir más imágenes. Elimina definitivamente imágenes de la Papelera para liberar espacio." :
+      "Queda poco espacio. Elimina definitivamente las imágenes que ya no uses desde la Papelera."}</p>}
+  </section>;
+}
+
 function formatBytes(bytes: number): string {
   return bytes < 1_000_000 ? `${(bytes / 1_000).toFixed(0)} kB` : `${(bytes / 1_000_000).toFixed(2)} MB`;
 }
@@ -21,11 +48,19 @@ export default function MediaLibrary() {
   const [notice, setNotice] = useState("");
   const [trashed, setTrashed] = useState<TrashRef | null>(null);
   const [view, setView] = useState("all");
+  const [usage, setUsage] = useState<Usage | null>(null);
+
+  // The bar is informative: if it cannot be read, the library still works.
+  async function refreshUsage() {
+    const response = await fetch("/api/admin/media/usage", { cache: "no-store" }).catch(() => null);
+    if (response?.ok) setUsage((await response.json()) as Usage);
+  }
 
   async function refresh() {
     const response = await fetch("/api/admin/media", { cache: "no-store" });
     if (!response.ok) throw new Error("No se pudo cargar el banco de imágenes.");
     setItems((await response.json()) as MediaItem[]);
+    void refreshUsage();
   }
 
   useEffect(() => {
@@ -34,6 +69,8 @@ export default function MediaLibrary() {
         const response = await fetch("/api/admin/media", { cache: "no-store" });
         if (!response.ok) throw new Error("No se pudo cargar el banco de imágenes.");
         setItems((await response.json()) as MediaItem[]);
+        const current = await fetch("/api/admin/media/usage", { cache: "no-store" }).catch(() => null);
+        if (current?.ok) setUsage((await current.json()) as Usage);
       } catch (failure) {
         setError(failure instanceof Error ? failure.message : "No se pudo cargar el banco.");
       }
@@ -50,7 +87,10 @@ export default function MediaLibrary() {
       body.append("file", file);
       body.append("altText", altText);
       const response = await fetch("/api/admin/media", { method: "POST", body });
-      if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo subir la imagen.");
+      if (!response.ok) {
+        if (response.status === 507) void refreshUsage();
+        throw new Error((await response.text()).trim() || "No se pudo subir la imagen.");
+      }
       await refresh();
       setFile(null); setAltText("");
       const input = document.querySelector<HTMLInputElement>("#media-upload-file");
@@ -85,6 +125,7 @@ export default function MediaLibrary() {
 
   return (
     <div className="flex flex-col gap-5">
+      {usage && <UsageBar usage={usage} />}
       <form className="grid gap-4 bg-white p-5 sm:p-6 md:grid-cols-[1fr_1fr_auto] md:items-end" onSubmit={(event) => void upload(event)}>
         <div className={ui.label}>Imagen *
           <FileField accept="image/png,image/jpeg,image/webp" disabled={busy} fileName={file?.name} hint="PNG, JPEG o WebP de hasta 8 MiB"

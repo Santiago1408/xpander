@@ -78,6 +78,7 @@ services:
       MEDIA_DIR: /srv/media
       ORDER_WHATSAPP_NUMBER: ${ORDER_WHATSAPP_NUMBER:?Define ORDER_WHATSAPP_NUMBER en .env}
       TRUST_PROXY_HEADERS: "true"
+      MEDIA_QUOTA_GB: ${MEDIA_QUOTA_GB:-40}
       DATABASE_URL: *database-url
     volumes:
       - media_data:/srv/media

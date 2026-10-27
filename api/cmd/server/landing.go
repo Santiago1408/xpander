@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,9 +20,10 @@ import (
 )
 
 type landingService struct {
-	pool     *pgxpool.Pool
-	admin    *adminAuth
-	mediaDir string
+	pool       *pgxpool.Pool
+	admin      *adminAuth
+	mediaDir   string
+	quotaBytes int64
 }
 
 type landingMedia struct {
@@ -97,13 +99,15 @@ type publishedLanding struct {
 	Sections       []publishedSection `json:"sections"`
 }
 
-func registerLandingRoutes(mux *http.ServeMux, pool *pgxpool.Pool, admin *adminAuth, mediaDir string) {
-	service := &landingService{pool: pool, admin: admin, mediaDir: mediaDir}
+func registerLandingRoutes(mux *http.ServeMux, pool *pgxpool.Pool, admin *adminAuth, mediaDir string, quotaBytes int64) {
+	service := &landingService{pool: pool, admin: admin, mediaDir: mediaDir, quotaBytes: quotaBytes}
 	mux.HandleFunc("GET /api/landing", service.publicLanding)
 	mux.HandleFunc("GET /api/admin/landing", service.getDraft)
 	mux.HandleFunc("PUT /api/admin/landing", service.saveDraft)
 	mux.HandleFunc("POST /api/admin/landing/publish", service.publish)
 	mux.HandleFunc("GET /api/admin/landing/publications", service.publications)
+	mux.HandleFunc("GET /api/admin/landing/publications/{version}", service.publication)
+	mux.HandleFunc("GET /api/admin/media/usage", service.getMediaUsage)
 	mux.HandleFunc("POST /api/admin/media", service.uploadMedia)
 	mux.HandleFunc("GET /api/admin/media", service.listMedia)
 	mux.HandleFunc("DELETE /api/admin/media/{id}", service.trashMedia)
@@ -678,6 +682,33 @@ func (service *landingService) publish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"version": version, "publishedAt": time.Now().UTC()})
+}
+
+// publication returns the content of one published version, so the panel can
+// preview it and restore it into the draft.
+func (service *landingService) publication(w http.ResponseWriter, r *http.Request) {
+	if _, ok := service.requireOwner(w, r, false); !ok {
+		return
+	}
+	version, err := strconv.ParseInt(r.PathValue("version"), 10, 64)
+	if err != nil || version <= 0 {
+		http.NotFound(w, r)
+		return
+	}
+	var snapshot []byte
+	err = service.pool.QueryRow(r.Context(), `SELECT pub.snapshot FROM page_publications pub
+		JOIN pages p ON p.id=pub.page_id WHERE p.slug='inicio' AND pub.version=$1`, version).Scan(&snapshot)
+	if errors.Is(err, pgx.ErrNoRows) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		serverError(w, "read publication", err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(snapshot)
 }
 
 func (service *landingService) publications(w http.ResponseWriter, r *http.Request) {

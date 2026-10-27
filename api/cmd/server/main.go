@@ -69,6 +69,10 @@ func run() error {
 	if !validWhatsAppNumber(whatsAppNumber) {
 		return errors.New("ORDER_WHATSAPP_NUMBER is required: 8 to 15 digits with country code")
 	}
+	mediaQuota, err := parseMediaQuota(os.Getenv("MEDIA_QUOTA_GB"))
+	if err != nil {
+		return err
+	}
 	trustProxy := false
 	switch os.Getenv("TRUST_PROXY_HEADERS") {
 	case "", "false":
@@ -77,7 +81,7 @@ func run() error {
 	default:
 		return errors.New("TRUST_PROXY_HEADERS must be true or false")
 	}
-	mux := buildAPI(pool, publicOrigin, secureCookies, mediaDir, whatsAppNumber, trustProxy)
+	mux := buildAPI(pool, publicOrigin, secureCookies, mediaDir, whatsAppNumber, trustProxy, mediaQuota)
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           mux,
@@ -107,11 +111,11 @@ func run() error {
 }
 
 // buildAPI registers every route; the integration tests mount the same handler.
-func buildAPI(pool *pgxpool.Pool, publicOrigin string, secureCookies bool, mediaDir, whatsAppNumber string, trustProxy bool) *http.ServeMux {
+func buildAPI(pool *pgxpool.Pool, publicOrigin string, secureCookies bool, mediaDir, whatsAppNumber string, trustProxy bool, mediaQuota int64) *http.ServeMux {
 	mux := newHandler(pool)
 	admin := registerAdminAuth(mux, databaseAuthStore{pool: pool}, publicOrigin, secureCookies)
 	admin.trustProxy = trustProxy
-	registerLandingRoutes(mux, pool, admin, mediaDir)
+	registerLandingRoutes(mux, pool, admin, mediaDir, mediaQuota)
 	registerBusinessRoutes(mux, pool, admin, mediaDir)
 	registerBrandRoutes(mux, pool, admin)
 	registerTermRoutes(mux, pool, admin)

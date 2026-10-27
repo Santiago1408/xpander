@@ -103,6 +103,15 @@ func (service *landingService) uploadMedia(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "no se pudo leer la imagen", http.StatusBadRequest)
 		return
 	}
+	used, err := service.mediaUsage(r.Context())
+	if err != nil {
+		serverError(w, "read media usage", err)
+		return
+	}
+	if used >= service.quotaBytes {
+		http.Error(w, quotaExceededMessage(service.quotaBytes), http.StatusInsufficientStorage)
+		return
+	}
 	processed, err := processUploadedImage(r.Context(), service.mediaDir, data, purpose)
 	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) ||
@@ -120,6 +129,15 @@ func (service *landingService) uploadMedia(w http.ResponseWriter, r *http.Reques
 			processed.removeFiles(service.mediaDir)
 		}
 	}()
+	// The final size is only known after processing.
+	var added int64
+	for _, file := range processed.files() {
+		added += file.Bytes
+	}
+	if used+added > service.quotaBytes {
+		http.Error(w, quotaExceededMessage(service.quotaBytes), http.StatusInsufficientStorage)
+		return
+	}
 	tx, err := service.pool.Begin(r.Context())
 	if err != nil {
 		serverError(w, "begin media upload", err)

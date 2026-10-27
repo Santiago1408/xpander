@@ -22,6 +22,7 @@ Cada ejecución crea el esquema desde cero con todas las migraciones (hasta la 0
 - **Cancelaciones:** un pedido sin pago se cancela. Uno con pago verificado solo se cancela si ya no hay stock y con la devolución confirmada; confirmar sin stock falla sin tocar el inventario.
 - **Venta en tienda:** descuenta stock, un reintento con la misma clave no la duplica, guarda canal, forma de pago y descuento, y se rechaza sin stock o con cantidades inválidas.
 - **Logos:** sin logo elegido `/api/brand/…` redirige al original; con uno subido entrega el PNG, rechaza usar un QR como logo y no deja enviar a la papelera un logo en uso.
-- **Landing:** guarda secciones (portada, beneficios, contacto y una oculta), publica en el orden del borrador, reordena y edita conservando los identificadores, omite las ocultas y rechaza publicar sin cambios.
+- **Landing:** guarda secciones (portada, beneficios, contacto y una oculta), publica en el orden del borrador, reordena y edita conservando los identificadores, omite las ocultas, devuelve el contenido de una versión anterior y rechaza publicar sin cambios.
+- **Límite de almacenamiento (`TestMediaQuota`):** con un límite de 2 KB, una foto se rechaza con 507 después de procesarla y no queda registrada.
 
 Las pruebas unitarias habituales siguen ejecutándose sin base de datos con `go test ./...`; las de integración solo corren con la etiqueta `integration`.

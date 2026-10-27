@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import LandingSections, { defaultBenefits, type BenefitItem, type CategoriesConfig, type CategoryTile, type LandingMedia, type LandingSection } from "../../../landing-sections";
+import LandingSections, { defaultBenefits, type BenefitItem, type CategoriesConfig, type CategoryTile, type LandingMedia, type LandingSection, type PublishedLanding } from "../../../landing-sections";
 import { BenefitIcon, benefitIconOptions } from "../../../benefit-icons";
 import { catalogBrands, catalogTerms, titleCase } from "../../../shop-format";
 import type { CatalogProduct } from "../../../catalogo/catalog-shop";
 import { socialPlatforms } from "../../../social-platforms";
 import TrashActions, { type TrashRef } from "../papelera/trash-actions";
 import MediaImage from "../../../media-image";
-import { EmptyState, FileField, Feedback, IconButton, PageHeader, Pill, ui } from "../../admin-ui";
+import { ConfirmDialog, EmptyState, FileField, Feedback, IconButton, PageHeader, Pill, ui } from "../../admin-ui";
 
 type DraftSection = LandingSection & {
   id: number;
@@ -56,6 +56,8 @@ export default function LandingEditor() {
   const [selectedMedia, setSelectedMedia] = useState<Record<string, number>>({});
   const [tab, setTab] = useState<"sections" | "page" | "preview" | "history">("sections");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [versionPreview, setVersionPreview] = useState<{ version: number; landing: PublishedLanding } | null>(null);
+  const [restoring, setRestoring] = useState<number | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -170,6 +172,50 @@ export default function LandingEditor() {
     setDraft(saved);
     setDirty(false);
     return saved;
+  }
+
+  async function loadVersion(version: number): Promise<PublishedLanding> {
+    const response = await fetch(`/api/admin/landing/publications/${version}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`No se pudo leer la versión ${version}.`);
+    return (await response.json()) as PublishedLanding;
+  }
+
+  async function previewVersion(version: number) {
+    if (busy) return;
+    setBusy(true); setError("");
+    try { setVersionPreview({ version, landing: await loadVersion(version) }); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : "No se pudo leer la versión."); }
+    finally { setBusy(false); }
+  }
+
+  // Replaces the draft with a published version. Its sections keep their identity
+  // when they still exist; the others go to the recycle bin, so nothing is lost.
+  async function restoreVersion(version: number) {
+    if (!draft || busy) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const snapshot = await loadVersion(version);
+      const available = new Map(library.filter((item) => !item.isDeleted).map((item) => [item.id, item]));
+      const current = new Map(draft.sections.map((section) => [section.key, section]));
+      let omitted = 0;
+      const restored: DraftSection[] = snapshot.sections.map((section) => {
+        const existing = current.get(section.key);
+        const media = section.media.flatMap((item) => available.get(item.id) ? [available.get(item.id)!] : (omitted++, []));
+        const categories = section.categories && { ...section.categories, tiles: section.categories.tiles.map((tile) =>
+          tile.mediaId && !available.has(tile.mediaId) ? (omitted++, { ...tile, mediaId: 0 }) : tile) };
+        return { ...section, id: existing?.id ?? 0, key: existing?.key ?? `new-${crypto.randomUUID()}`, isVisible: true, isDeleted: false,
+          media, categories, contact: section.contact || { socialLinks: {}, mapUrl: "" }, video: section.video || { url: "", embedUrl: "" } };
+      });
+      const restoredKeys = new Set(snapshot.sections.map((section) => section.key));
+      const trashed = draft.sections.filter((section) => section.id !== 0 && !restoredKeys.has(section.key))
+        .map((section) => ({ ...section, isDeleted: true }));
+      await save({ ...draft, title: snapshot.title, seoTitle: snapshot.seoTitle || "", seoDescription: snapshot.seoDescription || "", sections: [...restored, ...trashed] });
+      setRestoring(null); setVersionPreview(null); setTab("sections");
+      setNotice(`El borrador ahora es la versión ${version}${omitted ? `; se omitieron ${omitted} imagen(es) que ya no existen` : ""}. Revísalo y publica para mostrarlo.`);
+    } catch (failure) {
+      setRestoring(null);
+      setError(failure instanceof Error ? failure.message : "No se pudo restaurar la versión.");
+    } finally { setBusy(false); }
   }
 
   async function toggleSectionTrash(index: number) {
@@ -672,13 +718,37 @@ export default function LandingEditor() {
             {history.map((item, index) => (
               <li className="flex flex-wrap items-center gap-3 border-t border-mist px-5 py-3 text-sm first:border-0 sm:px-6" key={item.version}>
                 <span className="w-12 font-mono">v{item.version}</span>
-                <span className="flex-1 text-graphite">{new Date(item.publishedAt).toLocaleString("es-BO")}{item.username && ` · ${item.username}`}</span>
+                <span className="min-w-[180px] flex-1 text-graphite">{new Date(item.publishedAt).toLocaleString("es-BO")}{item.username && ` · ${item.username}`}</span>
                 {index === 0 && <Pill tone="solid">Pública</Pill>}
+                <span className="flex gap-2">
+                  <button className={ui.quiet} disabled={busy} onClick={() => void previewVersion(item.version)} type="button">Ver</button>
+                  <button className={ui.quiet} disabled={busy} onClick={() => setRestoring(item.version)} type="button">Restaurar como borrador</button>
+                </span>
               </li>
             ))}
           </ul>
         )}
       </section>}
+
+      {tab === "history" && versionPreview && <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="m-0 text-[13px] text-graphite">Así se veía la versión {versionPreview.version} al publicarse.</p>
+          <span className="flex gap-2">
+            <button className={ui.secondary} disabled={busy} onClick={() => setRestoring(versionPreview.version)} type="button">Restaurar como borrador</button>
+            <button className={ui.quiet} onClick={() => setVersionPreview(null)} type="button">Cerrar</button>
+          </span>
+        </div>
+        <div className="overflow-hidden border border-line bg-white">
+          <LandingSections landing={versionPreview.landing} products={catalogProducts} />
+        </div>
+      </div>}
+
+      {restoring !== null && <ConfirmDialog busy={busy} confirmLabel="Sí, restaurar" onCancel={() => setRestoring(null)}
+        onConfirm={() => void restoreVersion(restoring)} title={`Restaurar la versión ${restoring}`}>
+        <p className="m-0">El borrador se reemplazará por el contenido de la versión {restoring}. Las secciones actuales que no estaban en esa versión irán a la Papelera, donde puedes recuperarlas.</p>
+        {dirty && <p className="m-0 border-l-2 border-amber-600 bg-amber-50 p-3 text-amber-950">Tienes cambios sin guardar en el borrador: se perderán.</p>}
+        <p className="m-0 text-xs text-graphite">Los visitantes no verán nada distinto hasta que publiques.</p>
+      </ConfirmDialog>}
 
       <div className="sticky bottom-[calc(1rem+env(safe-area-inset-bottom))] z-30 flex flex-wrap items-center gap-3 border border-line bg-white p-3 shadow-lg sm:p-4 lg:bottom-4">
         <button className={ui.secondary} disabled={busy || !dirty} onClick={() => void saveClick()} type="button">Guardar borrador</button>

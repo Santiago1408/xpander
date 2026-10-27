@@ -136,8 +136,23 @@ func testPNG(t *testing.T, size int) []byte {
 	return buffer.Bytes()
 }
 
+// noisePNG barely compresses, so its processed size is reliably large.
+func noisePNG(t *testing.T, size int) []byte {
+	t.Helper()
+	picture := image.NewRGBA(image.Rect(0, 0, size, size))
+	_, _ = rand.Read(picture.Pix)
+	for index := 3; index < len(picture.Pix); index += 4 {
+		picture.Pix[index] = 255
+	}
+	var buffer bytes.Buffer
+	if err := png.Encode(&buffer, picture); err != nil {
+		t.Fatal(err)
+	}
+	return buffer.Bytes()
+}
+
 // startAPI rebuilds the test database from the migrations and serves the API with one owner and branch.
-func startAPI(t *testing.T) (*apiClient, *pgxpool.Pool, int64) {
+func startAPI(t *testing.T, mediaQuota int64) (*apiClient, *pgxpool.Pool, int64) {
 	t.Helper()
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
@@ -186,7 +201,7 @@ func startAPI(t *testing.T) (*apiClient, *pgxpool.Pool, int64) {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	server := httptest.NewServer(buildAPI(pool, testOrigin, false, t.TempDir(), "59100000000", false))
+	server := httptest.NewServer(buildAPI(pool, testOrigin, false, t.TempDir(), "59100000000", false, mediaQuota))
 	t.Cleanup(server.Close)
 	jar, _ := cookiejar.New(nil)
 	// Redirects are checked as answers, not followed.
@@ -241,7 +256,7 @@ func findOrder(c *apiClient, id int64) testOrder {
 }
 
 func TestStoreFlows(t *testing.T) {
-	c, _, centro := startAPI(t)
+	c, _, centro := startAPI(t, defaultMediaQuotaGB<<30)
 
 	// A second branch created from the panel, with no stock.
 	var sopocachi adminBranch
@@ -447,6 +462,12 @@ func TestStoreFlows(t *testing.T) {
 		if got := strings.Join(published(), ","); got != "Portada,Beneficios,Contáctanos" {
 			t.Fatalf("first publication order: %s", got)
 		}
+		firstVersion := draft.PublishedVersion
+		if firstVersion == 0 {
+			var reloaded landingDraft
+			c.expect(http.StatusOK, http.MethodGet, "/api/admin/landing", nil, &reloaded)
+			firstVersion = reloaded.PublishedVersion
+		}
 		// Reorder (benefits first), edit a title and show the hidden section, keeping the ids.
 		ids := map[string]int64{}
 		for _, section := range draft.Sections {
@@ -463,6 +484,15 @@ func TestStoreFlows(t *testing.T) {
 		save()
 		if got := strings.Join(published(), ","); got != "Beneficios,Ahora visible,Portada editada,Contáctanos" {
 			t.Fatalf("second publication order: %s", got)
+		}
+		// An earlier version can be read back to restore it into the draft.
+		var earlier publishedLanding
+		c.expect(http.StatusOK, http.MethodGet, fmt.Sprintf("/api/admin/landing/publications/%d", firstVersion), nil, &earlier)
+		if len(earlier.Sections) != 3 || earlier.Sections[0].Title != "Portada" {
+			t.Fatalf("version %d read back as %+v", firstVersion, earlier.Sections)
+		}
+		if status, _ := c.json(http.MethodGet, "/api/admin/landing/publications/999", nil); status != http.StatusNotFound {
+			t.Fatalf("missing version: %d, want 404", status)
 		}
 		// Publishing again without changes is rejected.
 		if status, _ := c.json(http.MethodPost, "/api/admin/landing/publish", map[string]int64{"draftRevision": draft.DraftRevision}); status != http.StatusConflict {
@@ -506,4 +536,25 @@ func TestStoreFlows(t *testing.T) {
 			t.Fatalf("back to default wordmark: %d", status)
 		}
 	})
+}
+
+func TestMediaQuota(t *testing.T) {
+	c, _, _ := startAPI(t, 2048)
+	var usage struct {
+		UsedBytes  int64 `json:"usedBytes"`
+		QuotaBytes int64 `json:"quotaBytes"`
+	}
+	c.expect(http.StatusOK, http.MethodGet, "/api/admin/media/usage", nil, &usage)
+	if usage.UsedBytes != 0 || usage.QuotaBytes != 2048 {
+		t.Fatalf("empty usage: %+v", usage)
+	}
+	// The first upload is processed, but its final size goes over the 2 KB limit.
+	status, data := c.upload("/api/admin/media", "file", map[string]string{"purpose": "photo"}, noisePNG(t, 400), nil)
+	if status != http.StatusInsufficientStorage || !strings.Contains(string(data), "límite de almacenamiento") {
+		t.Fatalf("upload over quota: %d %s", status, data)
+	}
+	c.expect(http.StatusOK, http.MethodGet, "/api/admin/media/usage", nil, &usage)
+	if usage.UsedBytes != 0 {
+		t.Fatalf("rejected upload was stored: %+v", usage)
+	}
 }

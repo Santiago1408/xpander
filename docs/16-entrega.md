@@ -51,3 +51,4 @@ En este orden, para que cada paso tenga lo que necesita:
 
 - El número de WhatsApp que recibe los pedidos se configura en el `.env` del VPS (`ORDER_WHATSAPP_NUMBER`), no desde el panel.
 - La herramienta de reinicio de datos de prueba solo existe en el entorno de desarrollo; la imagen de producción no la incluye.
+- **Logo en vector:** la tienda solo tiene el logo en PNG. Pide al propietario o a su diseñador el archivo vectorial original (AI, SVG o PDF) para imprenta y guárdalo en `logos/`.
