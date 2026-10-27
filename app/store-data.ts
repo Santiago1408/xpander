@@ -1,5 +1,5 @@
 import type { CatalogProduct } from "./catalogo/catalog-shop";
-import type { PublicBusiness } from "./landing-sections";
+import type { PublicBusiness, PublishedLanding } from "./landing-sections";
 
 export const apiOrigin = process.env.XPANDER_API_ORIGIN ?? "http://127.0.0.1:8080";
 
@@ -18,4 +18,8 @@ export function fetchCatalog() {
 
 export function fetchBusiness() {
   return optionalJSON<PublicBusiness>("/api/business");
+}
+
+export function fetchLanding() {
+  return optionalJSON<PublishedLanding>("/api/landing");
 }

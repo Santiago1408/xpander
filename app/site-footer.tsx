@@ -1,7 +1,8 @@
-import Link from "next/link";
-import { whatsappHref, type NavItem } from "./shop-format";
-import SocialIcon from "./social-icons";
-import { socialPlatforms } from "./social-platforms";
+import FitTitle from "./fit-title";
+import type { LandingSection } from "./landing-sections";
+import MediaImage from "./media-image";
+import { whatsappHref } from "./shop-format";
+import SocialLinks from "./social-links";
 
 export function mapDestination(embedUrl: string): string {
   const coordinates = /!2d(-?\d+(?:\.\d+)?)!3d(-?\d+(?:\.\d+)?)/.exec(embedUrl);
@@ -12,45 +13,46 @@ export function mapDestination(embedUrl: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
 }
 
-export default function SiteFooter({ nav, socialLinks = {}, phone = "", mapEmbedUrl = "" }: {
-  nav: NavItem[]; socialLinks?: Record<string, string>; phone?: string; mapEmbedUrl?: string;
+// The landing's contact section is shown as the footer of every storefront page.
+export function footerContact(sections: LandingSection[] = []): LandingSection | undefined {
+  return sections.find((section) => section.type === "contact" && section.isVisible !== false && section.isDeleted !== true);
+}
+
+export default function SiteFooter({ contact, phone = "", socialLinks = {} }: {
+  contact?: LandingSection; phone?: string; socialLinks?: Record<string, string>;
 }) {
-  const socials = socialPlatforms.filter(({ key }) => socialLinks[key]);
-  const columnTitle = "font-mono text-[11px] uppercase tracking-[0.1em] text-band-muted";
+  // Business links first, the section's own links on top, and WhatsApp from the phone when none is set.
+  const links: Record<string, string> = { ...socialLinks };
+  for (const [key, value] of Object.entries(contact?.contact?.socialLinks || {})) if (value) links[key] = value;
+  const whatsapp = links.whatsapp || whatsappHref(phone);
+  if (whatsapp) links.whatsapp = whatsapp;
+  const map = contact?.contact?.mapEmbedUrl || contact?.contact?.mapUrl || "";
+  const body = contact?.body?.trim() || "";
+  const media = contact?.media ?? [];
+
   return (
-    <footer className="mt-auto border-t border-band-line bg-band text-band-fg">
-      <div className="xp-container flex flex-col gap-16 pb-8 pt-[72px]">
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-10 text-sm">
-          <div className="flex flex-col gap-3">
-            <span className={columnTitle}>Tienda</span>
-            <Link className="hover:opacity-70" href="/catalogo">Catálogo</Link>
-            {nav.map((item) => <Link className="hover:opacity-70" href={item.href} key={item.href}>{item.label}</Link>)}
+    <footer className="mt-auto bg-ink text-white" id={contact?.key || "contacto"}>
+      <div className="xp-container flex flex-col pb-28 pt-[clamp(48px,6vw,96px)] sm:pb-16">
+        <FitTitle className="xp-display tracking-[-0.02em]" text={contact?.title?.trim() || "Contáctanos"} />
+        <div className={`mt-[clamp(32px,4vw,56px)] grid gap-10 border-t border-white/20 pt-10 ${map ? "lg:grid-cols-2" : ""}`}>
+          <div className="flex flex-col gap-7">
+            {body ? <p className="m-0 max-w-xl whitespace-pre-line text-[15px] leading-[1.65] text-[#d6d6d6]">{body}</p> :
+              phone && <a className="self-start font-mono text-lg hover:opacity-70" href={`tel:${phone.replace(/[^+\d]/g, "")}`}>{phone}</a>}
+            <SocialLinks links={links} tone="dark" />
           </div>
-          {socials.length > 0 && <div className="flex flex-col gap-3">
-            <span className={columnTitle}>Síguenos</span>
-            {socials.map(({ key, label }) => <a className="flex items-center gap-2.5 hover:opacity-70" href={socialLinks[key]} key={key}
-              rel="noopener noreferrer" target="_blank"><SocialIcon className="size-4 [--icon-contrast:var(--band)]" platform={key} />{label}</a>)}
-          </div>}
-          {phone && <div className="flex flex-col gap-3">
-            <span className={columnTitle}>Contacto</span>
-            <a className="hover:opacity-70" href={`tel:${phone.replace(/[^+\d]/g, "")}`}>{phone}</a>
-            {whatsappHref(phone) && !socialLinks.whatsapp && <a className="flex items-center gap-2.5 hover:opacity-70" href={whatsappHref(phone)!} rel="noopener noreferrer" target="_blank">
-              <SocialIcon className="size-4" platform="whatsapp" />WhatsApp</a>}
-            <span className="text-band-muted">Recojo o envío</span>
+          {map && <div className="relative min-h-64 overflow-hidden border border-white/20">
+            <iframe className="absolute inset-0 h-full w-full grayscale" loading="lazy" referrerPolicy="strict-origin-when-cross-origin"
+              src={map} title="Ubicación de la tienda" />
+            <a aria-label="Abrir ubicación de la tienda en Google Maps" className="absolute inset-0"
+              href={mapDestination(map)} rel="noopener noreferrer" target="_blank" />
           </div>}
         </div>
-        {mapEmbedUrl && <div className="relative overflow-hidden border border-band-line">
-          <iframe className="h-72 w-full grayscale" loading="lazy" referrerPolicy="strict-origin-when-cross-origin"
-            src={mapEmbedUrl} title="Ubicación de la tienda" />
-          <a aria-label="Abrir ubicación de la tienda en Google Maps" className="absolute inset-0"
-            href={mapDestination(mapEmbedUrl)} rel="noopener noreferrer" target="_blank" />
+        {media.length > 0 && <div className="mt-10 grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-4">
+          {media.map((image) => <div className="relative aspect-[4/5] overflow-hidden bg-[#242424]" key={image.id}>
+            {image.url && !image.removed && <MediaImage alt={image.altText} className="absolute inset-0 h-full w-full object-cover" height={1000}
+              sizes="(max-width: 768px) 100vw, 25vw" src={image.url} width={800} />}
+          </div>)}
         </div>}
-        {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-        <img alt="XPANDER" className="xp-logo-band block w-full" src="/brand/xpander-wordmark.png" />
-        <div className="flex flex-wrap justify-between gap-4 border-t border-band-line pt-6 font-mono text-xs text-band-muted">
-          <span>XPANDER · Bolivia</span>
-          <span>Precios en bolivianos (Bs.)</span>
-        </div>
       </div>
     </footer>
   );

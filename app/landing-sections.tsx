@@ -3,11 +3,10 @@ import type { ReactNode } from "react";
 import MediaImage from "./media-image";
 import ProductCard, { BrandPlaceholder } from "./product-card";
 import type { CatalogProduct } from "./catalogo/catalog-shop";
-import SiteFooter from "./site-footer";
+import SiteFooter, { footerContact } from "./site-footer";
 import SiteHeader from "./site-header";
 import { BenefitIcon } from "./benefit-icons";
-import SocialLinks from "./social-links";
-import { audienceHref, brandHref, catalogBrands, catalogNav, catalogTerms, styleHref, titleCase, whatsappHref } from "./shop-format";
+import { audienceHref, brandHref, catalogBrands, catalogNav, catalogTerms, styleHref, titleCase } from "./shop-format";
 
 export type LandingMedia = {
   id: number;
@@ -55,7 +54,7 @@ export type PublicBusiness = { phone: string; socialLinks: Record<string, string
 
 const sectionGap = "pt-[clamp(56px,7vw,112px)]";
 const bandGap = "mt-[clamp(56px,7vw,112px)]";
-const heading = "xp-display m-0 text-[clamp(32px,4vw,56px)] leading-none tracking-[-0.01em]";
+const heading = "xp-display m-0 text-[clamp(32px,4vw,56px)] leading-none tracking-[-0.01em] [overflow-wrap:anywhere]";
 
 // Fills the aspect box of its parent; removed images keep a visible marker.
 function Picture({ image, sizes, tone = "mist", eager = false }: {
@@ -294,29 +293,6 @@ function Video({ section }: { section: LandingSection }) {
   );
 }
 
-function Contact({ section, phone }: { section: LandingSection; phone?: string }) {
-  // A registered phone adds a WhatsApp link unless the section already sets one.
-  const links = { ...section.contact?.socialLinks };
-  const whatsapp = links.whatsapp || whatsappHref(phone);
-  if (whatsapp) links.whatsapp = whatsapp;
-  return (
-    <section className={`xp-container ${sectionGap}`} id={section.key}>
-      <div className="grid items-end gap-10 border-t border-ink pt-10 lg:grid-cols-2">
-        <h2 className="xp-display m-0 text-[clamp(36px,4.6vw,72px)] leading-[0.95] tracking-[-0.02em] [overflow-wrap:anywhere]">{section.title || "Contacto"}</h2>
-        <div className="flex flex-col gap-6">
-          <Body className="text-[15px] leading-[1.65] text-body" text={section.body} />
-          <SocialLinks links={links} />
-        </div>
-      </div>
-      {section.media.length > 0 && <div className="mt-10 grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-5">
-        {section.media.map((image) => <div className="relative aspect-[4/5] overflow-hidden bg-mist" key={image.id}>
-          <Picture image={image} sizes="(max-width: 768px) 100vw, 33vw" />
-        </div>)}
-      </div>}
-    </section>
-  );
-}
-
 function Benefits({ items, section }: { items: BenefitItem[]; section?: LandingSection }) {
   return (
     <section className={`xp-container ${sectionGap} ${section ? "" : "pb-[clamp(56px,7vw,112px)]"}`} id={section?.key}>
@@ -338,9 +314,12 @@ function Benefits({ items, section }: { items: BenefitItem[]; section?: LandingS
 export default function LandingSections({ landing, products = [], business }: {
   landing: PublishedLanding; products?: CatalogProduct[]; business?: PublicBusiness;
 }) {
-  const sections = landing.sections.filter(
+  const visible = landing.sections.filter(
     (section) => section.isVisible !== false && section.isDeleted !== true,
   );
+  // The contact section is always rendered last, as the page footer.
+  const contactSection = footerContact(visible);
+  const sections = visible.filter((section) => section.type !== "contact");
   const featuredProducts = products.filter((product) => product.isFeatured && product.variants.length > 0);
   const { audiences, styles } = catalogTerms(products);
   const nav = catalogNav(products);
@@ -350,13 +329,6 @@ export default function LandingSections({ landing, products = [], business }: {
   // An editable benefits section replaces the automatic strip before the footer.
   const hasBenefits = sections.some((section) => section.type === "benefits");
   const styleBlocks = styles.filter((style) => products.some((product) => product.style === style));
-  const contact = sections.find((section) => section.type === "contact" &&
-    (section.contact?.mapUrl || section.contact?.mapEmbedUrl))?.contact;
-  const socialLinks = { ...business?.socialLinks };
-  for (const section of sections) {
-    if (section.type !== "contact") continue;
-    for (const [key, value] of Object.entries(section.contact?.socialLinks || {})) if (value) socialLinks[key] = value;
-  }
   // The catalog-driven blocks follow the first section, normally the cover.
   const extrasAfter = 0;
   let heroCount = 0;
@@ -364,7 +336,7 @@ export default function LandingSections({ landing, products = [], business }: {
   return (
     <>
       <SiteHeader nav={nav} />
-      {sections.length === 0 && (
+      {sections.length === 0 && !contactSection && (
         <section className="bg-band text-band-fg">
           <div className="xp-container py-28">
             <h1 className="xp-display m-0 text-[clamp(52px,8vw,128px)] leading-[0.9]">{landing.title}</h1>
@@ -377,7 +349,6 @@ export default function LandingSections({ landing, products = [], business }: {
         else if (section.type === "featured") block = <Featured products={featuredProducts} section={section} />;
         else if (section.type === "gallery") block = <Gallery section={section} />;
         else if (section.type === "video") block = <Video section={section} />;
-        else if (section.type === "contact") block = <Contact phone={business?.phone} section={section} />;
         else if (section.type === "benefits") block = <Benefits items={section.benefits?.items ?? []} section={section} />;
         else if (section.type === "categories") block = <Categories section={section} />;
         else block = <Editorial section={section} />;
@@ -391,8 +362,7 @@ export default function LandingSections({ landing, products = [], business }: {
       })}
       {hasBenefits ? <div className="pb-[clamp(56px,7vw,112px)]" /> : <Benefits items={defaultBenefits.map((item) => item.icon === "qr" && !business?.qrUrl && business ?
         { ...item, text: "El pago en línea no está disponible por el momento." } : item)} />}
-      <SiteFooter mapEmbedUrl={contact?.mapEmbedUrl || contact?.mapUrl} nav={nav}
-        phone={business?.phone} socialLinks={socialLinks} />
+      <SiteFooter contact={contactSection} phone={business?.phone} socialLinks={business?.socialLinks} />
     </>
   );
 }

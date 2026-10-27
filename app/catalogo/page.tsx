@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import CatalogShop from "./catalog-shop";
 import { catalogNav } from "../shop-format";
-import SiteFooter from "../site-footer";
+import SiteFooter, { footerContact } from "../site-footer";
 import SiteHeader from "../site-header";
-import { fetchBusiness, fetchCatalog } from "../store-data";
+import { fetchBusiness, fetchCatalog, fetchLanding } from "../store-data";
 
 export const metadata: Metadata = {
   title: "Catálogo | XPANDER",
@@ -18,7 +18,7 @@ function Message({ text }: { text: string }) {
 }
 
 async function Catalog() {
-  const [products, business] = await Promise.all([fetchCatalog(), fetchBusiness()]);
+  const [products, business, landing] = await Promise.all([fetchCatalog(), fetchBusiness(), fetchLanding()]);
   const nav = catalogNav(products ?? []);
   return <>
     <SiteHeader activeHref="/catalogo" nav={nav} />
@@ -27,7 +27,7 @@ async function Catalog() {
         products.length === 0 ? <Message text="Aún no hay productos publicados. Vuelve pronto para conocer las novedades." /> :
           <CatalogShop products={products} />}
     </main>
-    <SiteFooter nav={nav} phone={business?.phone} socialLinks={business?.socialLinks} />
+    <SiteFooter contact={footerContact(landing?.sections)} phone={business?.phone} socialLinks={business?.socialLinks} />
   </>;
 }
 

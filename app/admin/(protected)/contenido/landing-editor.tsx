@@ -33,7 +33,7 @@ const sectionTypes = [
   { value: "hero", label: "Portada", hint: "Franja principal con título gigante, texto e imagen 4:5." },
   { value: "text", label: "Texto informativo", hint: "Bloque editorial: imagen 1:1, título, texto y botón al catálogo." },
   { value: "gallery", label: "Galería", hint: "Tarjetas 4:5 con su descripción; con 2 imágenes, paneles grandes." },
-  { value: "contact", label: "Contacto", hint: "Redes sociales y mapa en el pie de página." },
+  { value: "contact", label: "Contacto", hint: "Pie de página de toda la tienda: título a todo el ancho, texto, redes sociales y mapa." },
   { value: "video", label: "Video", hint: "Franja con reproductor de YouTube o Vimeo." },
   { value: "featured", label: "Productos destacados", hint: "Fichas marcadas como «Destacado» en Productos." },
   { value: "benefits", label: "Beneficios", hint: "Franja de hasta 6 beneficios con ícono, título y texto (recojo, pago, envío…). Reemplaza la franja automática antes del pie." },
@@ -124,7 +124,9 @@ export default function LandingEditor() {
   function moveSection(index: number, direction: -1 | 1) {
     setDraft((current) => {
       if (!current) return current;
-      const target = index + direction;
+      // Contact sections are pinned to the footer, so moves step over them.
+      let target = index + direction;
+      while (current.sections[target]?.type === "contact") target += direction;
       if (target < 0 || target >= current.sections.length) return current;
       const sections = [...current.sections];
       [sections[index], sections[target]] = [sections[target], sections[index]];
@@ -430,6 +432,138 @@ export default function LandingEditor() {
     </div>;
   }
 
+  // One row of the sections list. Body sections follow the page order; the
+  // pinned contact section is always rendered last, as the footer.
+  function sectionItem(section: DraftSection, index: number, position: number, total: number, pinned: boolean) {
+    const type = sectionTypes.find((item) => item.value === section.type);
+    const open = expanded[section.key] ?? false;
+    return <li className={`border-l-4 bg-white transition-shadow ${section.isDeleted ? "border-red-600 opacity-60" : section.isVisible ? "border-ink" : "border-[#bdbdbd]"} ${
+      open ? "shadow-[0_0_0_2px_#141414,0_16px_40px_rgba(0,0,0,.12)]" : ""}`} key={section.key}>
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
+        <span aria-hidden="true" className={`flex size-8 shrink-0 items-center justify-center font-mono text-xs ${section.isVisible && !section.isDeleted ? "bg-ink text-white" : "bg-mist text-graphite"}`}>
+          {pinned ? <svg className="size-4" fill="none" stroke="currentColor" strokeWidth="1.6" viewBox="0 0 24 24"><path d="M4 19h16M4 15h16" /></svg> : String(position).padStart(2, "0")}</span>
+        <button aria-expanded={open} className="flex min-w-0 flex-1 flex-col text-left" onClick={() => setExpanded((current) => ({ ...current, [section.key]: !open }))} type="button">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className={ui.eyebrow}>{type?.label || section.type}</span>
+            {!section.isVisible && !section.isDeleted && <Pill tone="dashed">Oculta</Pill>}
+            {section.isDeleted && <Pill tone="danger">Eliminada del borrador</Pill>}
+            {section.id === 0 && <Pill tone="soft">Nueva, sin guardar</Pill>}
+            {pinned && !section.isDeleted && <Pill tone="outline">Siempre al final</Pill>}
+          </span>
+          <span className={`truncate text-[15px] font-semibold ${section.isVisible ? "" : "text-graphite"}`}>{section.title || "Sin título"}</span>
+        </button>
+        <div className="flex items-center gap-1.5">
+          {!pinned && <>
+            <IconButton disabled={position === 1} icon="up" label="Subir sección" onClick={() => moveSection(index, -1)} />
+            <IconButton disabled={position === total} icon="down" label="Bajar sección" onClick={() => moveSection(index, 1)} />
+          </>}
+          <IconButton icon={section.isVisible ? "show" : "hide"} label={section.isVisible ? "Visible: pulsa para ocultar" : "Oculta: pulsa para mostrar"}
+            onClick={() => changeSection(index, { isVisible: !section.isVisible })} pressed={!section.isVisible} />
+          {section.isDeleted ? <IconButton icon="restore" label="Restaurar sección" onClick={() => void toggleSectionTrash(index)} /> :
+            <IconButton icon="delete" label="Eliminar sección" onClick={() => void toggleSectionTrash(index)} tone="danger" />}
+          <IconButton icon={open ? "close" : "edit"} label={open ? "Cerrar edición" : "Editar sección"} onClick={() => setExpanded((current) => ({ ...current, [section.key]: !open }))} pressed={open} />
+        </div>
+      </div>
+      {open && <div className="border-t-2 border-ink">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 bg-ink px-4 py-2.5 text-white sm:px-5">
+          <span className="font-mono text-[11px] uppercase tracking-[0.12em]">Editando · {type?.label || section.type}</span>
+          {type && <span className="text-xs text-[#bdbdbd]">{type.hint}</span>}
+        </div>
+        <div className="flex flex-col gap-5 p-4 sm:p-5">
+        <div className="grid gap-4">
+          <label className={ui.label}>Título
+            <input className={ui.input} maxLength={180} onChange={(event) => changeSection(index, { title: event.target.value })} value={section.title} />
+          </label>
+          <label className={ui.label}>Texto
+            <textarea className={ui.textarea} maxLength={10000} onChange={(event) => changeSection(index, { body: event.target.value })} rows={4} value={section.body} />
+          </label>
+        </div>
+        {section.type === "contact" && <div className="flex flex-col gap-4 bg-soft p-4">
+          <h4 className="m-0 text-sm font-semibold">Redes sociales y ubicación</h4>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {socialPlatforms.map(({ key, label }) => (
+              <label className={ui.label} key={key}>{label}
+                <input className={ui.input} placeholder="https://..." type="url"
+                  onChange={(event) => changeSection(index, { contact: {
+                    ...section.contact, socialLinks: { ...section.contact?.socialLinks, [key]: event.target.value },
+                  } })} value={section.contact?.socialLinks?.[key] || ""} />
+              </label>
+            ))}
+            <label className={`${ui.label} sm:col-span-2`}>Enlace de ubicación de Google Maps
+              <input className={ui.input} placeholder="https://www.google.com/maps/embed?pb=..." type="url"
+                onChange={(event) => changeSection(index, { contact: { ...section.contact, mapUrl: event.target.value } })}
+                value={section.contact?.mapUrl || ""} />
+              <span className={ui.hint}>En Google Maps usa Compartir → Incorporar un mapa → Copiar HTML; pega aquí solo la URL que aparece en src. El mapa aparecerá en el pie de página.</span>
+            </label>
+          </div>
+        </div>}
+        {section.type === "video" && <label className={ui.label}>Enlace de YouTube o Vimeo *
+          <input className={ui.input} placeholder="https://www.youtube.com/watch?v=..." type="url"
+            onChange={(event) => changeSection(index, { video: { url: event.target.value, embedUrl: "" } })}
+            value={section.video?.url || ""} />
+          <span className={ui.hint}>Puedes guardar un borrador sin enlace; para publicar esta sección visible, el video debe estar completo.</span>
+        </label>}
+        {section.type === "featured" && <p className="m-0 bg-soft p-4 text-sm text-body">
+          Los productos de esta sección se eligen marcando «Destacado» en cada ficha. Sus precios e imágenes se leen del catálogo activo.
+          <Link className="ml-1 underline" href="/admin/catalogo/productos">Abrir productos</Link>
+        </p>}
+        {section.type === "categories" && categoriesEditor(section, index)}
+        {section.type === "benefits" && benefitsEditor(section, index)}
+        {section.type !== "categories" && section.type !== "benefits" && <div className="flex flex-col gap-3">
+          <div className="flex items-baseline justify-between"><p className="m-0 text-sm font-semibold">Imágenes</p>
+            <span className="font-mono text-xs text-graphite">{section.media.length} / 12</span></div>
+          {section.media.length > 0 && <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+            {section.media.map((image) => (
+              <div className="flex flex-col gap-1.5" key={image.id}>
+                <div className="relative aspect-square overflow-hidden bg-mist">
+                  {image.url && !image.removed && <MediaImage alt={image.altText} className="absolute inset-0 h-full w-full object-cover" height={160}
+                    sizes="160px" src={image.url} width={160} />}
+                </div>
+                <span className="truncate text-xs" title={image.altText}>{image.altText || `Imagen ${image.id}`}</span>
+                <button className={`${ui.dangerLink} self-start text-xs`} onClick={() => changeSection(index,
+                  { media: section.media.filter((item) => item.id !== image.id) })} type="button">Quitar</button>
+              </div>
+            ))}
+          </div>}
+          <div className="grid gap-3 border-t border-line pt-4 md:grid-cols-2">
+            <div className="flex flex-col gap-3">
+              <label className={ui.label}>Texto alternativo de la nueva imagen
+                <input className={ui.input} maxLength={200}
+                  onChange={(event) => setAltTexts((current) => ({ ...current, [section.key]: event.target.value }))}
+                  placeholder="Describe la imagen" value={altTexts[section.key] || ""} />
+              </label>
+              <FileField accept="image/jpeg,image/png,image/webp" disabled={busy || section.media.length >= 12} hint="PNG, JPEG o WebP de hasta 8 MiB"
+                label="Subir imagen" onFile={(file) => { if (file) void uploadImage(index, file); }} />
+            </div>
+            <div className="flex flex-col gap-3">
+              <label className={ui.label}>O elegir del banco de imágenes
+                <select className={ui.input}
+                  onChange={(event) => setSelectedMedia((current) => ({ ...current, [section.key]: Number(event.target.value) }))}
+                  value={selectedMedia[section.key] || 0}>
+                  <option value={0}>Selecciona una imagen</option>
+                  {library.filter((item) => !item.isDeleted && item.purpose !== "qr" && !section.media.some((used) => used.id === item.id)).map((item) =>
+                    <option key={item.id} value={item.id}>{item.altText || `Imagen ${item.id}`}</option>)}
+                </select>
+              </label>
+              <button className={`${ui.secondary} self-start`}
+                disabled={!selectedMedia[section.key] || section.media.length >= 12}
+                onClick={() => {
+                  const item = library.find((media) => media.id === selectedMedia[section.key] && !media.isDeleted);
+                  if (item) changeSection(index, { media: [...section.media, item] });
+                  setSelectedMedia((current) => ({ ...current, [section.key]: 0 }));
+                }} type="button">Agregar imagen</button>
+            </div>
+          </div>
+        </div>}
+        </div>
+      </div>}
+    </li>;
+  }
+
+  // Indexes into draft.sections, split by where each section is rendered.
+  const bodySections = draft.sections.flatMap((section, index) => section.type === "contact" ? [] : [index]);
+  const contactSections = draft.sections.flatMap((section, index) => section.type === "contact" ? [index] : []);
+
   const tabs = [
     { value: "sections" as const, label: "Secciones", count: draft.sections.filter((section) => !section.isDeleted).length },
     { value: "page" as const, label: "Página y SEO" },
@@ -479,132 +613,44 @@ export default function LandingEditor() {
       </section>}
 
       {tab === "sections" && <>
-        {draft.sections.length === 0 && <EmptyState>Todavía no hay secciones. Agrega una portada para comenzar.</EmptyState>}
-        <ol className="m-0 flex list-none flex-col gap-3 p-0">
-        {draft.sections.map((section, index) => {
-          const type = sectionTypes.find((item) => item.value === section.type);
-          const open = expanded[section.key] ?? false;
-          return <li className={`bg-white ${section.isDeleted ? "opacity-60" : ""}`} key={section.key}>
-            <div className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
-              <span className="font-mono text-xs text-graphite">{String(index + 1).padStart(2, "0")}</span>
-              <button aria-expanded={open} className="flex min-w-0 flex-1 flex-col text-left" onClick={() => setExpanded((current) => ({ ...current, [section.key]: !open }))} type="button">
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className={ui.eyebrow}>{type?.label || section.type}</span>
-                  {!section.isVisible && !section.isDeleted && <Pill tone="dashed">Oculta</Pill>}
-                  {section.isDeleted && <Pill tone="danger">Eliminada del borrador</Pill>}
-                  {section.id === 0 && <Pill tone="soft">Nueva, sin guardar</Pill>}
-                </span>
-                <span className="truncate text-[15px] font-semibold">{section.title || "Sin título"}</span>
-              </button>
-              <div className="flex items-center gap-1.5">
-                <IconButton disabled={index === 0} icon="up" label="Subir sección" onClick={() => moveSection(index, -1)} />
-                <IconButton disabled={index === draft.sections.length - 1} icon="down" label="Bajar sección" onClick={() => moveSection(index, 1)} />
-                <IconButton icon={section.isVisible ? "show" : "hide"} label={section.isVisible ? "Visible: pulsa para ocultar" : "Oculta: pulsa para mostrar"}
-                  onClick={() => changeSection(index, { isVisible: !section.isVisible })} pressed={!section.isVisible} />
-                {section.isDeleted ? <IconButton icon="restore" label="Restaurar sección" onClick={() => void toggleSectionTrash(index)} /> :
-                  <IconButton icon="delete" label="Eliminar sección" onClick={() => void toggleSectionTrash(index)} tone="danger" />}
-                <IconButton icon={open ? "close" : "edit"} label={open ? "Cerrar edición" : "Editar sección"} onClick={() => setExpanded((current) => ({ ...current, [section.key]: !open }))} pressed={open} />
-              </div>
-            </div>
-            {open && <div className="flex flex-col gap-5 border-t border-line p-4 sm:p-5">
-              {type && <p className={`${ui.hint} m-0`}>{type.hint}</p>}
-              <div className="grid gap-4">
-                <label className={ui.label}>Título
-                  <input className={ui.input} maxLength={180} onChange={(event) => changeSection(index, { title: event.target.value })} value={section.title} />
-                </label>
-                <label className={ui.label}>Texto
-                  <textarea className={ui.textarea} maxLength={10000} onChange={(event) => changeSection(index, { body: event.target.value })} rows={4} value={section.body} />
-                </label>
-              </div>
-              {section.type === "contact" && <div className="flex flex-col gap-4 bg-soft p-4">
-                <h4 className="m-0 text-sm font-semibold">Redes sociales y ubicación</h4>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {socialPlatforms.map(({ key, label }) => (
-                    <label className={ui.label} key={key}>{label}
-                      <input className={ui.input} placeholder="https://..." type="url"
-                        onChange={(event) => changeSection(index, { contact: {
-                          ...section.contact, socialLinks: { ...section.contact?.socialLinks, [key]: event.target.value },
-                        } })} value={section.contact?.socialLinks?.[key] || ""} />
-                    </label>
-                  ))}
-                  <label className={`${ui.label} sm:col-span-2`}>Enlace de ubicación de Google Maps
-                    <input className={ui.input} placeholder="https://www.google.com/maps/embed?pb=..." type="url"
-                      onChange={(event) => changeSection(index, { contact: { ...section.contact, mapUrl: event.target.value } })}
-                      value={section.contact?.mapUrl || ""} />
-                    <span className={ui.hint}>En Google Maps usa Compartir → Incorporar un mapa → Copiar HTML; pega aquí solo la URL que aparece en src. El mapa aparecerá en el pie de página.</span>
-                  </label>
-                </div>
-              </div>}
-              {section.type === "video" && <label className={ui.label}>Enlace de YouTube o Vimeo *
-                <input className={ui.input} placeholder="https://www.youtube.com/watch?v=..." type="url"
-                  onChange={(event) => changeSection(index, { video: { url: event.target.value, embedUrl: "" } })}
-                  value={section.video?.url || ""} />
-                <span className={ui.hint}>Puedes guardar un borrador sin enlace; para publicar esta sección visible, el video debe estar completo.</span>
-              </label>}
-              {section.type === "featured" && <p className="m-0 bg-soft p-4 text-sm text-body">
-                Los productos de esta sección se eligen marcando «Destacado» en cada ficha. Sus precios e imágenes se leen del catálogo activo.
-                <Link className="ml-1 underline" href="/admin/catalogo/productos">Abrir productos</Link>
-              </p>}
-              {section.type === "categories" && categoriesEditor(section, index)}
-              {section.type === "benefits" && benefitsEditor(section, index)}
-              {section.type !== "categories" && section.type !== "benefits" && <div className="flex flex-col gap-3">
-                <div className="flex items-baseline justify-between"><p className="m-0 text-sm font-semibold">Imágenes</p>
-                  <span className="font-mono text-xs text-graphite">{section.media.length} / 12</span></div>
-                {section.media.length > 0 && <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
-                  {section.media.map((image) => (
-                    <div className="flex flex-col gap-1.5" key={image.id}>
-                      <div className="relative aspect-square overflow-hidden bg-mist">
-                        {image.url && !image.removed && <MediaImage alt={image.altText} className="absolute inset-0 h-full w-full object-cover" height={160}
-                          sizes="160px" src={image.url} width={160} />}
-                      </div>
-                      <span className="truncate text-xs" title={image.altText}>{image.altText || `Imagen ${image.id}`}</span>
-                      <button className={`${ui.dangerLink} self-start text-xs`} onClick={() => changeSection(index,
-                        { media: section.media.filter((item) => item.id !== image.id) })} type="button">Quitar</button>
-                    </div>
-                  ))}
-                </div>}
-                <div className="grid gap-3 border-t border-line pt-4 md:grid-cols-2">
-                  <div className="flex flex-col gap-3">
-                    <label className={ui.label}>Texto alternativo de la nueva imagen
-                      <input className={ui.input} maxLength={200}
-                        onChange={(event) => setAltTexts((current) => ({ ...current, [section.key]: event.target.value }))}
-                        placeholder="Describe la imagen" value={altTexts[section.key] || ""} />
-                    </label>
-                    <FileField accept="image/jpeg,image/png,image/webp" disabled={busy || section.media.length >= 12} hint="PNG, JPEG o WebP de hasta 8 MiB"
-                      label="Subir imagen" onFile={(file) => { if (file) void uploadImage(index, file); }} />
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    <label className={ui.label}>O elegir del banco de imágenes
-                      <select className={ui.input}
-                        onChange={(event) => setSelectedMedia((current) => ({ ...current, [section.key]: Number(event.target.value) }))}
-                        value={selectedMedia[section.key] || 0}>
-                        <option value={0}>Selecciona una imagen</option>
-                        {library.filter((item) => !item.isDeleted && item.purpose !== "qr" && !section.media.some((used) => used.id === item.id)).map((item) =>
-                          <option key={item.id} value={item.id}>{item.altText || `Imagen ${item.id}`}</option>)}
-                      </select>
-                    </label>
-                    <button className={`${ui.secondary} self-start`}
-                      disabled={!selectedMedia[section.key] || section.media.length >= 12}
-                      onClick={() => {
-                        const item = library.find((media) => media.id === selectedMedia[section.key] && !media.isDeleted);
-                        if (item) changeSection(index, { media: [...section.media, item] });
-                        setSelectedMedia((current) => ({ ...current, [section.key]: 0 }));
-                      }} type="button">Agregar imagen</button>
-                  </div>
-                </div>
-              </div>}
-            </div>}
-          </li>;
-        })}
-        </ol>
-        <section className={`${ui.card} ${ui.cardPad}`}>
-          <h2 className={ui.cardTitle}>Agregar sección</h2>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {sectionTypes.map((item) => (
-              <button className="flex flex-col gap-1 border border-line p-4 text-left transition-colors hover:border-ink" key={item.value}
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div><h2 className={ui.cardTitle}>Secciones de la página</h2>
+              <p className={`${ui.hint} m-0 mt-1`}>Se muestran en este orden, de arriba abajo. Usa las flechas para reordenar y el lápiz para editar.</p></div>
+            <span className="flex items-center gap-3 text-xs text-graphite">
+              <span className="flex items-center gap-1.5"><span className="h-3 w-1 bg-ink" />Visible</span>
+              <span className="flex items-center gap-1.5"><span className="h-3 w-1 bg-[#bdbdbd]" />Oculta</span>
+              <span className="flex items-center gap-1.5"><span className="h-3 w-1 bg-red-600" />En papelera</span>
+            </span>
+          </div>
+          {bodySections.length === 0 ? <EmptyState>Todavía no hay secciones. Agrega una portada para comenzar.</EmptyState> :
+            <ol className="m-0 flex list-none flex-col gap-3 p-0">
+              {bodySections.map((index, position) => sectionItem(draft.sections[index], index, position + 1, bodySections.length, false))}
+            </ol>}
+        </section>
+
+        <section className="flex flex-col gap-3">
+          <div><h2 className={ui.cardTitle}>Pie de página</h2>
+            <p className={`${ui.hint} m-0 mt-1`}>La sección de contacto se muestra siempre al final de todas las páginas de la tienda: inicio, catálogo y ficha de producto. Si la ocultas, el pie muestra el teléfono y las redes de Datos del negocio.</p></div>
+          {contactSections.length === 0 ? <div className="flex flex-wrap items-center justify-between gap-3 border border-dashed border-[#bdbdbd] bg-white p-4 text-sm text-graphite">
+            Sin sección de contacto: el pie usa el teléfono y las redes de Datos del negocio.
+            <button className={ui.secondary} onClick={() => addSection("contact")} type="button">+ Crear contacto</button>
+          </div> : <ol className="m-0 flex list-none flex-col gap-3 p-0">
+            {contactSections.map((index, position) => sectionItem(draft.sections[index], index, position + 1, contactSections.length, true))}
+          </ol>}
+          {contactSections.length > 1 && <p className="m-0 text-xs text-amber-800">Solo se muestra la primera sección de contacto visible. Elimina las demás para evitar confusiones.</p>}
+        </section>
+
+        <section className="flex flex-col gap-4 border-2 border-dashed border-[#bdbdbd] p-4 sm:p-5">
+          <div><h2 className={ui.cardTitle}>Agregar una sección nueva</h2>
+            <p className={`${ui.hint} m-0 mt-1`}>Se agrega al final de la lista y se abre para editarla. Los visitantes la verán cuando publiques.</p></div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {sectionTypes.filter((item) => item.value !== "contact").map((item) => (
+              <button className="group flex items-start gap-3 border border-line bg-soft p-4 text-left transition-colors hover:border-ink hover:bg-white" key={item.value}
                 onClick={() => addSection(item.value)} type="button">
-                <span className="text-sm font-semibold">+ {item.label}</span>
-                <span className="text-xs text-graphite">{item.hint}</span>
+                <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center border border-ink text-lg leading-none transition-colors group-hover:bg-ink group-hover:text-white">+</span>
+                <span className="flex flex-col gap-1"><span className="text-sm font-semibold">{item.label}</span>
+                  <span className="text-xs text-graphite">{item.hint}</span></span>
               </button>
             ))}
           </div>

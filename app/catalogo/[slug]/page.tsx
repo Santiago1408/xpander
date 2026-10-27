@@ -4,9 +4,9 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import ProductCard from "../../product-card";
 import { catalogNav, styleHref, titleCase } from "../../shop-format";
-import SiteFooter from "../../site-footer";
+import SiteFooter, { footerContact } from "../../site-footer";
 import SiteHeader from "../../site-header";
-import { fetchBusiness, fetchCatalog } from "../../store-data";
+import { fetchBusiness, fetchCatalog, fetchLanding } from "../../store-data";
 import ProductDetail from "./product-detail";
 
 export async function generateMetadata({ params }: PageProps<"/catalogo/[slug]">): Promise<Metadata> {
@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: PageProps<"/catalogo/[slug]">
 
 async function Product({ params }: { params: PageProps<"/catalogo/[slug]">["params"] }) {
   const { slug } = await params;
-  const [products, business] = await Promise.all([fetchCatalog(), fetchBusiness()]);
+  const [products, business, landing] = await Promise.all([fetchCatalog(), fetchBusiness(), fetchLanding()]);
   const product = products?.find((item) => item.slug === slug);
   if (!products || !product) notFound();
   const nav = catalogNav(products);
@@ -49,7 +49,7 @@ async function Product({ params }: { params: PageProps<"/catalogo/[slug]">["para
         </div>
       </section>}
     </main>
-    <SiteFooter nav={nav} phone={business?.phone} socialLinks={business?.socialLinks} />
+    <SiteFooter contact={footerContact(landing?.sections)} phone={business?.phone} socialLinks={business?.socialLinks} />
   </>;
 }
 
