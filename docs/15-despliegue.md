@@ -6,8 +6,8 @@ XPANDER se publica en `https://xpandertienda.duckdns.org` con su propio proyecto
 
 | Archivo | Para qué |
 | --- | --- |
-| `compose.prod.yaml` | Pila de producción. `web` y `api` escuchan solo en `127.0.0.1` (puertos 13000 y 18080). |
-| `compose.prod.caddy-docker.yaml` | Solo si Caddy corre en Docker: une `web` y `api` a la red de Caddy como `xpander-web` y `xpander-api`. |
+| `compose.prod.yaml` | Pila de producción. `xpander-web` y `xpander-api` escuchan solo en `127.0.0.1` (puertos 13000 y 18080). Sus nombres son únicos para no confundirse con el `api` o `web` de otro proyecto en una red compartida. |
+| `compose.prod.caddy-docker.yaml` | Solo si Caddy corre en Docker: une `xpander-web` y `xpander-api` a una red compartida con Caddy (`CADDY_NETWORK`). |
 | `api/Dockerfile`, `Dockerfile` | Imágenes de producción de la API (binarios compilados + ImageMagick) y de Next (modo standalone). |
 | `.env.production.example` | Plantilla del `.env` con los secretos; el `.env` real nunca se sube a git. |
 | `deploy/Caddyfile.sistema`, `deploy/Caddyfile.docker` | Bloque de Caddy para cada variante, con HTTPS automático y cabeceras de seguridad. |
@@ -22,7 +22,9 @@ docker ps --format '{{.Names}}\t{{.Image}}\t{{.Ports}}' | grep -i caddy
 systemctl is-active caddy
 ```
 
-- Si el primer comando muestra un contenedor con los puertos 80/443, **Caddy está en Docker**. Anota su nombre y busca su red con `docker inspect NOMBRE --format '{{range $red, $_ := .NetworkSettings.Networks}}{{$red}} {{end}}'`.
+- Si el primer comando muestra un contenedor con los puertos 80/443, **Caddy está en Docker**. No se usa la red interna de ese proyecto: se crea una red propia y aislada, `xpander_edge`, a la que solo se unen ese Caddy, `xpander-web` y `xpander-api` (`sudo docker network create xpander_edge`, y `CADDY_NETWORK=xpander_edge` en el `.env`).
+
+**En el VPS actual** Caddy vive dentro del contenedor `web` de Cabello (`cabello_demo-web-1`) y su Caddyfile se copia en la imagen desde `deploy/Caddyfile` del repositorio de Cabello. Ese repositorio ya incluye el bloque de XPANDER y la red `xpander_edge`; ver su `docs/despliegue-demostracion.md`. Docker requiere `sudo` para el usuario `deploy`: antepón `sudo` a todos los comandos `docker` y a `deploy/backup.sh` y `deploy/restore.sh`.
 - Si el segundo responde `active`, **Caddy es un servicio del sistema** y su configuración está en `/etc/caddy/Caddyfile`.
 
 ## 2. DNS
@@ -55,7 +57,7 @@ docker compose --profile setup run --rm bootstrap
 
 ## 5. Conectar Caddy
 
-- **Caddy en Docker:** agrega el contenido de `deploy/Caddyfile.docker` al Caddyfile de Cabello y recárgalo con `docker exec NOMBRE caddy reload --config /etc/caddy/Caddyfile`.
+- **Caddy en Docker:** agrega el contenido de `deploy/Caddyfile.docker` al Caddyfile de ese proyecto. Si el Caddyfile está montado desde el VPS, recárgalo con `docker exec NOMBRE caddy reload --config /etc/caddy/Caddyfile`; si se copia en la imagen (caso de Cabello), reconstruye y reinicia solo ese contenedor.
 - **Caddy del sistema:** agrega `deploy/Caddyfile.sistema` a `/etc/caddy/Caddyfile`, valida con `sudo caddy validate --config /etc/caddy/Caddyfile` y recarga con `sudo systemctl reload caddy`.
 
 Caddy obtiene el certificado HTTPS en el primer acceso. Comprueba:

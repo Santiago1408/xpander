@@ -1,5 +1,7 @@
 # Production stack. Secrets and the domain come from .env (see
 # .env.production.example); API and database never publish public ports.
+# The public services are named xpander-api and xpander-web so they never
+# collide with another project's "api" or "web" on a shared Caddy network.
 # The guide is docs/15-despliegue.md.
 name: xpander
 
@@ -68,7 +70,7 @@ services:
     networks:
       - private
 
-  api:
+  xpander-api:
     <<: *api-image
     restart: unless-stopped
     environment:
@@ -91,21 +93,21 @@ services:
     networks:
       - private
 
-  web:
+  xpander-web:
     build:
       context: .
       args:
-        XPANDER_API_ORIGIN: http://api:8080
+        XPANDER_API_ORIGIN: http://xpander-api:8080
         XPANDER_PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Define PUBLIC_ORIGIN en .env}
     image: xpander-web:latest
     restart: unless-stopped
     environment:
-      XPANDER_API_ORIGIN: http://api:8080
+      XPANDER_API_ORIGIN: http://xpander-api:8080
       XPANDER_PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Define PUBLIC_ORIGIN en .env}
     ports:
       - "127.0.0.1:${XPANDER_WEB_PORT:-13000}:3000"
     depends_on:
-      - api
+      - xpander-api
     networks:
       - private
 

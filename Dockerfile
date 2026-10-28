@@ -6,7 +6,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-ARG XPANDER_API_ORIGIN=http://api:8080
+ARG XPANDER_API_ORIGIN=http://xpander-api:8080
 # Public address for absolute links in shared previews, robots.txt and the sitemap.
 ARG XPANDER_PUBLIC_ORIGIN
 ENV XPANDER_API_ORIGIN=$XPANDER_API_ORIGIN XPANDER_PUBLIC_ORIGIN=$XPANDER_PUBLIC_ORIGIN

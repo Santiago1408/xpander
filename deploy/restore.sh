@@ -14,10 +14,10 @@ done
 read -r -p "Se reemplazarán la base y las imágenes actuales por las de $source. Escribe RESTAURAR para continuar: " answer
 [ "$answer" = "RESTAURAR" ] || { echo "Cancelado."; exit 1; }
 
-docker compose stop web api
+docker compose stop xpander-web xpander-api
 echo "Restaurando la base de datos…"
 docker compose exec -T database pg_restore -U xpander -d xpander --clean --if-exists --no-owner --single-transaction < "$source/database.dump"
 echo "Restaurando imágenes y comprobantes…"
-docker compose run --rm --no-deps -T --entrypoint sh api -c 'find /srv/media -mindepth 1 -delete && tar -C /srv/media -xzf -' < "$source/media.tar.gz"
-docker compose up -d api web
+docker compose run --rm --no-deps -T --entrypoint sh xpander-api -c 'find /srv/media -mindepth 1 -delete && tar -C /srv/media -xzf -' < "$source/media.tar.gz"
+docker compose up -d xpander-api xpander-web
 echo "Restauración terminada."

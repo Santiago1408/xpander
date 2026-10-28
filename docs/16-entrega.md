@@ -16,7 +16,7 @@ docker compose exec -T database psql -U xpander -d xpander -c "SELECT
   (SELECT count(*) FROM stock_movements) movimientos, (SELECT count(*) FROM media) imagenes,
   (SELECT count(*) FROM page_sections) secciones, (SELECT count(*) FROM page_publications) publicaciones,
   (SELECT phone FROM business_profile) telefono;"
-docker compose exec api find /srv/media -type f | wc -l
+docker compose exec xpander-api find /srv/media -type f | wc -l
 ```
 
 Todos los conteos deben ser `0`, el teléfono debe estar vacío y el último comando debe mostrar `0` archivos.

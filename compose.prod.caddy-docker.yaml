@@ -1,17 +1,16 @@
 # Only when Caddy runs as a Docker container (for example in the Cabello stack):
-# joins the API and the web to Caddy's network under unique names.
+# joins the API and the web to Caddy's network. Their service names
+# (xpander-api, xpander-web) are what Caddy uses to reach them.
 # Enable it with COMPOSE_FILE in .env; see docs/15-despliegue.md.
 services:
-  api:
+  xpander-api:
     networks:
       private: {}
-      edge:
-        aliases: [xpander-api]
-  web:
+      edge: {}
+  xpander-web:
     networks:
       private: {}
-      edge:
-        aliases: [xpander-web]
+      edge: {}
 
 networks:
   edge:

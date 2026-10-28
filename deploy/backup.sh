@@ -16,7 +16,7 @@ echo "Respaldando la base de datos…"
 docker compose exec -T database pg_dump -U xpander -d xpander --format=custom > "$target/database.dump"
 
 echo "Respaldando imágenes y comprobantes…"
-docker compose run --rm --no-deps -T --entrypoint tar api -C /srv/media -czf - . > "$target/media.tar.gz"
+docker compose run --rm --no-deps -T --entrypoint tar xpander-api -C /srv/media -czf - . > "$target/media.tar.gz"
 
 (cd "$target" && sha256sum database.dump media.tar.gz > SHA256SUMS)
 echo "Respaldo listo en $target ($(du -sh "$target" | cut -f1))."

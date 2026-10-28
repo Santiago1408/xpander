@@ -1,6 +1,6 @@
 # Block for a Caddy that runs as a Docker container. Append it to that Caddy's
-# Caddyfile; xpander-api and xpander-web are the names given by
-# compose.prod.caddy-docker.yaml on the shared network.
+# Caddyfile; xpander-api and xpander-web are the service names
+# of compose.prod.yaml on the shared network (compose.prod.caddy-docker.yaml).
 xpandertienda.duckdns.org {
 	encode zstd gzip
 	# Photos and payment receipts are limited to 8 MiB by the API.
