@@ -125,8 +125,9 @@ func (service *trashService) list(w http.ResponseWriter, r *http.Request) {
 			SELECT 'product'::text kind, id, name label, deleted_at FROM products WHERE deleted_at IS NOT NULL
 			UNION ALL SELECT 'variant', v.id, p.name || ' · ' || v.code, v.deleted_at
 				FROM product_variants v JOIN products p ON p.id=v.product_id WHERE v.deleted_at IS NOT NULL
-			UNION ALL SELECT 'media', id, COALESCE(NULLIF(alt_text,''), 'Imagen ' || id::text), deleted_at
-				FROM media WHERE deleted_at IS NOT NULL AND kind='image' AND source_type='local'
+			UNION ALL SELECT 'media', id, COALESCE(NULLIF(alt_text,''),
+				CASE WHEN kind='video' THEN 'Video ' ELSE 'Imagen ' END || id::text), deleted_at
+				FROM media WHERE deleted_at IS NOT NULL AND kind IN ('image','video') AND source_type='local'
 			UNION ALL SELECT 'section', id, COALESCE(NULLIF(title,''), 'Sección ' || id::text), deleted_at
 				FROM page_sections WHERE deleted_at IS NOT NULL
 		) trashed ORDER BY deleted_at DESC, kind, id DESC`)
@@ -426,7 +427,7 @@ func (service *trashService) purge(w http.ResponseWriter, r *http.Request) {
 		query = `DELETE FROM page_sections WHERE id=$1 AND deleted_at IS NOT NULL RETURNING page_id`
 	} else if kind == "media" {
 		query = `DELETE FROM media WHERE id=$1 AND deleted_at IS NOT NULL
-			AND kind='image' AND source_type='local' RETURNING storage_key`
+			AND kind IN ('image','video') AND source_type='local' RETURNING storage_key`
 	}
 	if kind == "media" {
 		if err := tx.QueryRow(r.Context(), query, id).Scan(&storageKey); err != nil {

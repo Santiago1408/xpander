@@ -7,7 +7,7 @@ import { clearStoredCart, maxCartLines, maxLineQuantity, readStoredCart, writeSt
 import type { CatalogProduct } from "./catalogo/catalog-shop";
 import MediaImage from "./media-image";
 import { BrandPlaceholder } from "./product-card";
-import { formatBOB, productHref, sizeLabel, titleCase, variantInStock } from "./shop-format";
+import { formatBOB, mobileDigits, mobilePattern, productHref, sizeLabel, titleCase, variantInStock } from "./shop-format";
 import { notify } from "./toast";
 
 type Branch = { id: number; name: string; address: string; instructions: string };
@@ -336,8 +336,9 @@ export default function CheckoutFlow({ products, layout, onClose }: {
             onChange={(event) => setCustomerName(event.target.value)} placeholder="Nombre y apellido" required value={customerName} />
         </label>
         <label className="flex flex-col gap-1.5 text-[13px] font-medium">Celular / WhatsApp *
-          <input autoComplete="tel" className={field} disabled={busy} inputMode="tel" maxLength={25}
-            onChange={(event) => setCustomerPhone(event.target.value)} placeholder="+591 7xx xxxxx" required type="tel" value={customerPhone} />
+          <input autoComplete="tel-national" className={`${field} font-mono`} disabled={busy} inputMode="numeric"
+            onChange={(event) => setCustomerPhone(mobileDigits(event.target.value))} pattern={mobilePattern} placeholder="71234567"
+            required title="8 dígitos, empieza con 6 o 7" type="tel" value={customerPhone} />
         </label>
       </div>
       <fieldset className="m-0 flex flex-col gap-2.5 border-0 p-0">

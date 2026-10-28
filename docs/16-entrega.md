@@ -42,10 +42,21 @@ En este orden, para que cada paso tenga lo que necesita:
 2. **Datos del negocio:** teléfono, redes sociales, logos (opcional; si no, se usan los originales) y el **QR de pago con su fecha de vencimiento**. Sin un QR vigente la tienda no acepta pedidos.
 3. **Marcas, estilos y público:** registrar los valores que se usarán en los productos.
 4. **Productos:** crear las fichas con fotos, tallas, precios y el stock inicial de cada sucursal.
-5. **Contenido web:** armar las secciones de la página de inicio, completar la sección de contacto (el pie de todas las páginas) y **publicar**.
+5. **Contenido web:** armar las secciones de la página de inicio, elegir el diseño de la portada, agregar el buzón de sugerencias, completar la sección de contacto (el pie de todas las páginas) y **publicar**.
 6. **Pedido de prueba:** desde el sitio público, registrar un pedido con QR y subir un comprobante; en **Pedidos**, comprobar que llega y cancelarlo para no alterar el stock.
 7. **Privacidad:** leer `/privacidad` con el propietario. Es un texto base que describe lo que el sistema guarda; si quiere cambiarlo, el texto está en `app/privacidad/page.tsx`.
 8. **Respaldo:** con la carga inicial terminada, ejecutar `deploy/backup.sh` y guardar una copia fuera del VPS.
+
+## Vaciar una tienda ya desplegada
+
+Si la tienda se usó en el VPS para mostrar el funcionamiento, `deploy/vaciar.sh` la deja lista para la carga real. Muestra qué se borrará, pide escribir `VACIAR`, hace un respaldo con `deploy/backup.sh` y después borra productos, marcas, estilos y público, stock, pedidos, ventas en tienda, comprobantes, imágenes, videos, la landing (borrador, publicaciones e historial) y las sugerencias. Conserva las cuentas, las sucursales y el teléfono y las redes de Datos del negocio; el QR y los logos son imágenes, así que se borran y vuelven los logos originales. Los números de pedido y los códigos de producto vuelven a empezar.
+
+```sh
+cd ~/apps/xpander
+sudo deploy/vaciar.sh
+```
+
+Después sigue la primera configuración desde el paso 2: el QR de pago, los productos y el contenido web.
 
 ## Qué queda fuera de la entrega
 

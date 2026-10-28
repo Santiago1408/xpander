@@ -20,6 +20,8 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -178,7 +180,7 @@ func startAPI(t *testing.T, mediaQuota int64) (*apiClient, *pgxpool.Pool, int64)
 	if err != nil {
 		t.Fatalf("apply migrations: %v", err)
 	}
-	if len(applied) == 0 || !strings.HasPrefix(applied[len(applied)-1], "025") {
+	if len(applied) == 0 || !strings.HasPrefix(applied[len(applied)-1], "026") {
 		t.Fatalf("unexpected migrations applied: %v", applied)
 	}
 	hash, err := auth.HashPassword("clave-de-prueba-segura")
@@ -536,6 +538,66 @@ func TestStoreFlows(t *testing.T) {
 			t.Fatalf("back to default wordmark: %d", status)
 		}
 	})
+
+	t.Run("buzón de sugerencias", func(t *testing.T) {
+		c.expect(http.StatusCreated, http.MethodPost, "/api/suggestions",
+			map[string]string{"name": " Ana ", "phone": "+591 7123 4567", "message": "Chamarras de cuero talla M"}, nil)
+		if status, _ := c.json(http.MethodPost, "/api/suggestions", map[string]string{"name": "Ana", "phone": "123", "message": "Jeans"}); status != http.StatusBadRequest {
+			t.Fatalf("invalid phone: %d, want 400", status)
+		}
+		// A bot filling the hidden field gets the same answer, but nothing is stored.
+		c.expect(http.StatusCreated, http.MethodPost, "/api/suggestions",
+			map[string]string{"name": "Bot", "phone": "71234567", "message": "Spam", "website": "https://spam.example"}, nil)
+		var items []suggestion
+		c.expect(http.StatusOK, http.MethodGet, "/api/admin/suggestions", nil, &items)
+		if len(items) != 1 || items[0].Name != "Ana" || items[0].Phone != "71234567" || items[0].Status != "pending" {
+			t.Fatalf("stored suggestions: %+v", items)
+		}
+		path := fmt.Sprintf("/api/admin/suggestions/%d", items[0].ID)
+		c.expect(http.StatusNoContent, http.MethodPatch, path, map[string]string{"status": "done"}, nil)
+		c.expect(http.StatusOK, http.MethodGet, "/api/admin/suggestions", nil, &items)
+		if len(items) != 1 || items[0].Status != "done" {
+			t.Fatalf("suggestion not attended: %+v", items)
+		}
+		c.expect(http.StatusNoContent, http.MethodDelete, path, nil, nil)
+		c.expect(http.StatusOK, http.MethodGet, "/api/admin/suggestions", nil, &items)
+		if len(items) != 0 {
+			t.Fatalf("suggestion not deleted: %+v", items)
+		}
+	})
+
+	t.Run("variantes de portada", func(t *testing.T) {
+		var draft landingDraft
+		c.expect(http.StatusOK, http.MethodGet, "/api/admin/landing", nil, &draft)
+		sections := []sectionInput{}
+		for _, section := range draft.Sections {
+			sections = append(sections, sectionInput{ID: section.ID, Type: section.Type, Title: section.Title, Body: section.Body,
+				IsVisible: section.IsVisible, IsDeleted: true, MediaIDs: []int64{}, Contact: section.Contact,
+				Benefits: section.Benefits, Categories: section.Categories})
+		}
+		cover := heroConfig{Variant: "cover", TitleSize: "xl", Overlay: 60, TextPosition: "center", Height: "medium"}
+		sections = append(sections,
+			sectionInput{Type: "hero", Title: "Nueva temporada", IsVisible: true, MediaIDs: []int64{}, Hero: &cover},
+			sectionInput{Type: "suggestions", Title: "¿Qué prenda buscas?", IsVisible: true, MediaIDs: []int64{}})
+		bad := cover
+		bad.Overlay = 95
+		invalid := append([]sectionInput{}, sections...)
+		invalid[len(invalid)-2] = sectionInput{Type: "hero", Title: "Mal", IsVisible: true, MediaIDs: []int64{}, Hero: &bad}
+		if status, _ := c.json(http.MethodPut, "/api/admin/landing", draftInput{DraftRevision: draft.DraftRevision, Title: "XPANDER", Sections: &invalid}); status != http.StatusBadRequest {
+			t.Fatalf("overlay over the limit: %d, want 400", status)
+		}
+		invalid[len(invalid)-2] = sectionInput{Type: "text", Title: "Mal", IsVisible: true, MediaIDs: []int64{}, Hero: &cover}
+		if status, _ := c.json(http.MethodPut, "/api/admin/landing", draftInput{DraftRevision: draft.DraftRevision, Title: "XPANDER", Sections: &invalid}); status != http.StatusBadRequest {
+			t.Fatalf("cover design on a text section: %d, want 400", status)
+		}
+		c.expect(http.StatusOK, http.MethodPut, "/api/admin/landing", draftInput{DraftRevision: draft.DraftRevision, Title: "XPANDER", Sections: &sections}, &draft)
+		c.expect(http.StatusCreated, http.MethodPost, "/api/admin/landing/publish", map[string]int64{"draftRevision": draft.DraftRevision}, nil)
+		var landing publishedLanding
+		c.expect(http.StatusOK, http.MethodGet, "/api/landing", nil, &landing)
+		if len(landing.Sections) != 2 || landing.Sections[0].Hero == nil || *landing.Sections[0].Hero != cover || landing.Sections[1].Type != "suggestions" {
+			t.Fatalf("published cover: %+v", landing.Sections)
+		}
+	})
 }
 
 func TestMediaQuota(t *testing.T) {
@@ -556,5 +618,78 @@ func TestMediaQuota(t *testing.T) {
 	c.expect(http.StatusOK, http.MethodGet, "/api/admin/media/usage", nil, &usage)
 	if usage.UsedBytes != 0 {
 		t.Fatalf("rejected upload was stored: %+v", usage)
+	}
+}
+
+// testVideo renders a test pattern with ffmpeg, which the API container has.
+func testVideo(t *testing.T, seconds int) []byte {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "prueba.mp4")
+	output, err := exec.Command("ffmpeg", "-v", "error", "-f", "lavfi", "-i",
+		fmt.Sprintf("testsrc=duration=%d:size=320x240:rate=10", seconds), "-pix_fmt", "yuv420p", "-y", path).CombinedOutput()
+	if err != nil {
+		t.Fatalf("render test video: %v: %s", err, output)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func TestVideoUploads(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	c, _, _ := startAPI(t, 1<<30)
+	status, data := c.upload("/api/admin/media/videos", "file", map[string]string{"altText": "Pasarela"}, testVideo(t, 2), nil)
+	if status != http.StatusCreated {
+		t.Fatalf("upload video: %d %s", status, data)
+	}
+	var video landingMedia
+	_ = json.Unmarshal(data, &video)
+	if video.Kind != "video" || video.ID == 0 {
+		t.Fatalf("uploaded video: %+v", video)
+	}
+	path := fmt.Sprintf("/api/admin/media/%d", video.ID)
+	if status, _, headers := c.sendFull(http.MethodGet, path, "", nil, map[string]string{"Range": "bytes=0-99"}); status != http.StatusPartialContent || headers.Get("Content-Type") != "video/mp4" {
+		t.Fatalf("video range request: %d %q", status, headers.Get("Content-Type"))
+	}
+	if status, _, headers := c.sendFull(http.MethodGet, path+"?size=card", "", nil, nil); status != http.StatusOK || headers.Get("Content-Type") != "image/webp" {
+		t.Fatalf("video poster: %d %q", status, headers.Get("Content-Type"))
+	}
+	status, data = c.upload("/api/admin/media/videos", "file", nil, testVideo(t, 33), nil)
+	if status != http.StatusBadRequest || !strings.Contains(string(data), "máximo es 30") {
+		t.Fatalf("long video: %d %s", status, data)
+	}
+	status, data = c.upload("/api/admin/media/videos", "file", nil, testPNG(t, 64), nil)
+	if status != http.StatusBadRequest {
+		t.Fatalf("image sent as video: %d %s", status, data)
+	}
+
+	// Videos go in the cover, the gallery and the image blocks, not in a text section.
+	var draft landingDraft
+	c.expect(http.StatusOK, http.MethodGet, "/api/admin/landing", nil, &draft)
+	sections := []sectionInput{{Type: "text", Title: "Texto", IsVisible: true, MediaIDs: []int64{video.ID}}}
+	if status, _ := c.json(http.MethodPut, "/api/admin/landing", draftInput{DraftRevision: draft.DraftRevision, Title: "XPANDER", Sections: &sections}); status != http.StatusBadRequest {
+		t.Fatalf("video in a text section: %d, want 400", status)
+	}
+	sections = []sectionInput{{Type: "hero", Title: "Portada", IsVisible: true, MediaIDs: []int64{video.ID},
+		Hero: &heroConfig{Variant: "cover", TitleSize: "l", Overlay: 40, TextPosition: "bottom", Height: "full"}}}
+	c.expect(http.StatusOK, http.MethodPut, "/api/admin/landing", draftInput{DraftRevision: draft.DraftRevision, Title: "XPANDER", Sections: &sections}, &draft)
+	c.expect(http.StatusCreated, http.MethodPost, "/api/admin/landing/publish", map[string]int64{"draftRevision": draft.DraftRevision}, nil)
+	if status, _, headers := c.sendFull(http.MethodGet, fmt.Sprintf("/api/media/%d", video.ID), "", nil, nil); status != http.StatusOK || headers.Get("Content-Type") != "video/mp4" {
+		t.Fatalf("published video: %d %q", status, headers.Get("Content-Type"))
+	}
+
+	// Five videos at most, counting the ones in the recycle bin.
+	for count := 2; count <= 5; count++ {
+		if status, data := c.upload("/api/admin/media/videos", "file", nil, testVideo(t, 1), nil); status != http.StatusCreated {
+			t.Fatalf("video %d: %d %s", count, status, data)
+		}
+	}
+	status, data = c.upload("/api/admin/media/videos", "file", nil, testVideo(t, 1), nil)
+	if status != http.StatusConflict || !strings.Contains(string(data), "Papelera") {
+		t.Fatalf("sixth video: %d %s", status, data)
 	}
 }

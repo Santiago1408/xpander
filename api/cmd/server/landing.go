@@ -47,6 +47,7 @@ type landingSection struct {
 	Video      videoConfig       `json:"video"`
 	Categories *categoriesConfig `json:"categories,omitempty"`
 	Benefits   *benefitsConfig   `json:"benefits,omitempty"`
+	Hero       *heroConfig       `json:"hero,omitempty"`
 }
 
 type landingDraft struct {
@@ -70,6 +71,7 @@ type sectionInput struct {
 	Video      videoConfig       `json:"video"`
 	Categories *categoriesConfig `json:"categories,omitempty"`
 	Benefits   *benefitsConfig   `json:"benefits,omitempty"`
+	Hero       *heroConfig       `json:"hero,omitempty"`
 }
 
 type draftInput struct {
@@ -90,6 +92,7 @@ type publishedSection struct {
 	Video      videoConfig       `json:"video"`
 	Categories *categoriesConfig `json:"categories,omitempty"`
 	Benefits   *benefitsConfig   `json:"benefits,omitempty"`
+	Hero       *heroConfig       `json:"hero,omitempty"`
 }
 
 type publishedLanding struct {
@@ -109,6 +112,7 @@ func registerLandingRoutes(mux *http.ServeMux, pool *pgxpool.Pool, admin *adminA
 	mux.HandleFunc("GET /api/admin/landing/publications/{version}", service.publication)
 	mux.HandleFunc("GET /api/admin/media/usage", service.getMediaUsage)
 	mux.HandleFunc("POST /api/admin/media", service.uploadMedia)
+	mux.HandleFunc("POST /api/admin/media/videos", service.uploadVideo)
 	mux.HandleFunc("GET /api/admin/media", service.listMedia)
 	mux.HandleFunc("DELETE /api/admin/media/{id}", service.trashMedia)
 	mux.HandleFunc("POST /api/admin/media/{id}/restore", service.restoreMedia)
@@ -211,6 +215,14 @@ func (service *landingService) loadDraft(ctx context.Context) (landingDraft, err
 			}
 			section.Benefits.normalize()
 		}
+		if section.Type == "hero" {
+			section.Hero = &heroConfig{}
+			if err := json.Unmarshal(config, section.Hero); err != nil {
+				rows.Close()
+				return draft, err
+			}
+			section.Hero.normalize()
+		}
 		if section.Type == "video" {
 			if err := json.Unmarshal(config, &section.Video); err != nil {
 				rows.Close()
@@ -274,11 +286,16 @@ func (service *landingService) sectionMedia(ctx context.Context, db queryer, sec
 
 func validSectionType(value string) bool {
 	switch value {
-	case "hero", "text", "gallery", "contact", "video", "featured", "categories", "benefits":
+	case "hero", "text", "gallery", "contact", "video", "featured", "categories", "benefits", "suggestions":
 		return true
 	default:
 		return false
 	}
+}
+
+// Uploaded videos play in the cover and in the image-based sections.
+func sectionAcceptsVideo(sectionType string) bool {
+	return sectionType == "hero" || sectionType == "gallery" || sectionType == "categories"
 }
 
 func validateDraft(input draftInput) error {
@@ -309,6 +326,9 @@ func validateDraft(input draftInput) error {
 			return err
 		}
 		if err := validateBenefitsConfig(section.Type, section.Benefits); err != nil {
+			return err
+		}
+		if err := validateHeroConfig(section.Type, section.Hero); err != nil {
 			return err
 		}
 		mediaSeen := map[int64]bool{}
@@ -410,6 +430,13 @@ func (service *landingService) saveDraft(w http.ResponseWriter, r *http.Request)
 				return
 			}
 			config, err = json.Marshal(section.Video)
+		} else if section.Type == "hero" {
+			hero := heroConfig{}
+			if section.Hero != nil {
+				hero = *section.Hero
+			}
+			hero.normalize()
+			config, err = json.Marshal(hero)
 		} else if section.Type == "benefits" {
 			benefits := benefitsConfig{}
 			if section.Benefits != nil {
@@ -471,8 +498,8 @@ func (service *landingService) saveDraft(w http.ResponseWriter, r *http.Request)
 				}
 				return
 			}
-			if kind != "image" {
-				http.Error(w, "solo se admiten imágenes en esta etapa", http.StatusBadRequest)
+			if kind == "video" && !sectionAcceptsVideo(section.Type) {
+				http.Error(w, "los videos solo se admiten en la portada, la galería y los bloques de imágenes", http.StatusBadRequest)
 				return
 			}
 			if _, err := tx.Exec(r.Context(), `INSERT INTO page_section_media (section_id, media_id, sort_order)
@@ -600,6 +627,15 @@ func (service *landingService) publish(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			section.Benefits.normalize()
+		}
+		if section.Type == "hero" {
+			section.Hero = &heroConfig{}
+			if err := json.Unmarshal(config, section.Hero); err != nil {
+				rows.Close()
+				serverError(w, "read section cover", err)
+				return
+			}
+			section.Hero.normalize()
 		}
 		if section.Type == "video" {
 			if err := json.Unmarshal(config, &section.Video); err != nil {

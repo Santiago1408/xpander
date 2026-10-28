@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import LandingSections, { defaultBenefits, type BenefitItem, type CategoriesConfig, type CategoryTile, type LandingMedia, type LandingSection, type PublishedLanding } from "../../../landing-sections";
+import LandingSections, { LandingHero, defaultBenefits, defaultHero, type BenefitItem, type CategoriesConfig, type CategoryTile, type HeroConfig, type LandingMedia, type LandingSection, type PublishedLanding } from "../../../landing-sections";
 import { BenefitIcon, benefitIconOptions } from "../../../benefit-icons";
 import { catalogBrands, catalogTerms, titleCase } from "../../../shop-format";
 import type { CatalogProduct } from "../../../catalogo/catalog-shop";
@@ -30,10 +30,11 @@ type Publication = { version: number; publishedAt: string; username: string };
 type LibraryMedia = LandingMedia & { isDeleted: boolean; purpose?: "photo" | "qr" | "logo" };
 
 const sectionTypes = [
-  { value: "hero", label: "Portada", hint: "Franja principal con título gigante, texto e imagen 4:5." },
+  { value: "hero", label: "Portada", hint: "Bienvenida con título gigante, en cuatro diseños; con imagen o video." },
   { value: "text", label: "Texto informativo", hint: "Bloque editorial: imagen 1:1, título, texto y botón al catálogo." },
-  { value: "gallery", label: "Galería", hint: "Tarjetas 4:5 con su descripción; con 2 imágenes, paneles grandes." },
+  { value: "gallery", label: "Galería", hint: "Tarjetas 4:5 de imágenes o videos con su descripción; con 2, paneles grandes." },
   { value: "contact", label: "Contacto", hint: "Pie de página de toda la tienda: título a todo el ancho, texto, redes sociales y mapa." },
+  { value: "suggestions", label: "Buzón de sugerencias", hint: "Formulario sobre el pie de página: los clientes dejan su nombre, su celular y las prendas que buscan. Llegan a Sugerencias." },
   { value: "video", label: "Video", hint: "Franja con reproductor de YouTube o Vimeo." },
   { value: "featured", label: "Productos destacados", hint: "Fichas marcadas como «Destacado» en Productos." },
   { value: "benefits", label: "Beneficios", hint: "Franja de hasta 6 beneficios con ícono, título y texto (recojo, pago, envío…). Reemplaza la franja automática antes del pie." },
@@ -41,6 +42,86 @@ const sectionTypes = [
 ];
 
 const blankTile = (): CategoryTile => ({ mediaId: 0, title: "", linkKind: "", linkValue: "" });
+
+// Sections shown in a fixed place at the end of the page, outside the ordered list.
+const pinnedTypes = ["suggestions", "contact"];
+// Uploaded videos are accepted by the API in these sections only.
+const videoSections = ["hero", "gallery", "categories"];
+const maxVideos = 5;
+const maxVideoSeconds = 30;
+const maxVideoBytes = 100 * 1024 * 1024;
+
+const heroVariants: { value: HeroConfig["variant"]; label: string; hint: string }[] = [
+  { value: "classic", label: "Clásica", hint: "Texto a un lado e imagen 4:5 al otro." },
+  { value: "cover", label: "Fondo completo", hint: "La imagen o el video cubre toda la franja, con el texto encima." },
+  { value: "split", label: "Pantalla dividida", hint: "Mitad texto, mitad imagen hasta el borde de la pantalla." },
+  { value: "centered", label: "Centrada", hint: "Título centrado y una franja panorámica debajo." },
+];
+
+// Small diagram of each cover layout for the variant picker.
+function HeroSketch({ variant }: { variant: HeroConfig["variant"] }) {
+  const lines = (center = false, light = false) => <span className={`flex w-full flex-col gap-1 ${center ? "items-center" : ""}`}>
+    <span className={`h-1.5 w-3/4 ${light ? "bg-white" : "bg-ink"}`} /><span className={`h-1.5 w-1/2 ${light ? "bg-white" : "bg-ink"}`} />
+    <span className={`mt-0.5 h-1 w-1/3 ${light ? "bg-white/60" : "bg-[#bdbdbd]"}`} />
+  </span>;
+  if (variant === "cover") return <span className="flex h-full flex-col justify-end bg-[linear-gradient(135deg,#5e5e5e,#242424)] p-2">{lines(false, true)}</span>;
+  if (variant === "split") return <span className="grid h-full grid-cols-2"><span className="flex items-end p-2">{lines()}</span><span className="bg-[#bdbdbd]" /></span>;
+  if (variant === "centered") return <span className="flex h-full flex-col items-center gap-1.5 p-2">{lines(true)}<span className="w-full flex-1 bg-[#bdbdbd]" /></span>;
+  return <span className="grid h-full grid-cols-2 gap-2 p-2"><span className="flex items-end">{lines()}</span><span className="bg-[#bdbdbd]" /></span>;
+}
+
+function sentence(text: string, fallback: string) {
+  const value = text.trim() || fallback;
+  return value.charAt(0).toLocaleUpperCase("es-BO") + value.slice(1) + (/[.!?]$/.test(value) ? "" : ".");
+}
+
+// Reads the length of a video in the browser before uploading it. Some formats
+// (HEVC on older browsers) cannot be read here; the server checks them anyway.
+function videoDuration(file: File): Promise<number> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    const url = URL.createObjectURL(file);
+    const done = (value: number) => { URL.revokeObjectURL(url); resolve(value); };
+    video.preload = "metadata";
+    video.onloadedmetadata = () => done(video.duration);
+    video.onerror = () => done(Number.NaN);
+    video.src = url;
+  });
+}
+
+// Uploads with XMLHttpRequest to show progress: phone videos can weigh tens of MB.
+function sendVideo(file: File, altText: string, onProgress: (percent: number) => void): Promise<LandingMedia> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", "/api/admin/media/videos");
+    request.upload.onprogress = (event) => { if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100)); };
+    request.upload.onload = () => onProgress(100);
+    request.onload = () => request.status === 201 ? resolve(JSON.parse(request.responseText) as LandingMedia) :
+      reject(new Error(sentence(request.status === 413 ? "el video supera los 100 MB" : request.responseText, "No se pudo subir el video")));
+    request.onerror = () => reject(new Error("Se perdió la conexión al subir el video. Inténtalo de nuevo."));
+    const data = new FormData();
+    data.append("altText", altText);
+    data.append("file", file);
+    request.send(data);
+  });
+}
+
+// Thumbnails of videos use their poster still.
+function thumbnailSrc(item: Pick<LandingMedia, "kind" | "url">) {
+  return item.kind === "video" ? `${item.url}?size=thumb` : item.url;
+}
+
+function VideoProgress({ percent }: { percent: number }) {
+  return <div className="flex flex-col gap-1.5" role="status">
+    <span className="text-xs text-body">{percent < 100 ? `Subiendo video… ${percent} %` : "Procesando video… puede tardar hasta un minuto. No cierres esta página."}</span>
+    <div className="h-1.5 bg-mist"><div className={`h-1.5 bg-ink ${percent >= 100 ? "animate-pulse" : ""}`} style={{ width: `${percent}%` }} /></div>
+  </div>;
+}
+
+function mediaLabel(item: Pick<LandingMedia, "id" | "kind" | "altText">) {
+  const kind = item.kind === "video" ? "Video" : "Imagen";
+  return item.kind === "video" ? `Video · ${item.altText || item.id}` : item.altText || `${kind} ${item.id}`;
+}
 
 export default function LandingEditor() {
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -58,6 +139,7 @@ export default function LandingEditor() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [versionPreview, setVersionPreview] = useState<{ version: number; landing: PublishedLanding } | null>(null);
   const [restoring, setRestoring] = useState<number | null>(null);
+  const [videoProgress, setVideoProgress] = useState<{ key: string; percent: number } | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -111,6 +193,11 @@ export default function LandingEditor() {
       video: { url: "", embedUrl: "" },
     };
     if (type === "benefits") section.benefits = { items: defaultBenefits.map((item) => ({ ...item })) };
+    if (type === "hero") section.hero = { ...defaultHero };
+    if (type === "suggestions") {
+      section.title = "¿Qué prenda te gustaría encontrar?";
+      section.body = "Cuéntanos qué buscas: marca, modelo, talla o color. Lo tendremos en cuenta en nuestra próxima compra y te escribiremos si lo conseguimos.";
+    }
     if (type === "categories") {
       // Start from the catalog styles; each block still needs its own image.
       const styles = catalogTerms(catalogProducts).styles;
@@ -126,9 +213,9 @@ export default function LandingEditor() {
   function moveSection(index: number, direction: -1 | 1) {
     setDraft((current) => {
       if (!current) return current;
-      // Contact sections are pinned to the footer, so moves step over them.
+      // Contact and suggestion sections are pinned above and in the footer, so moves step over them.
       let target = index + direction;
-      while (current.sections[target]?.type === "contact") target += direction;
+      while (pinnedTypes.includes(current.sections[target]?.type ?? "")) target += direction;
       if (target < 0 || target >= current.sections.length) return current;
       const sections = [...current.sections];
       [sections[index], sections[target]] = [sections[target], sections[index]];
@@ -158,6 +245,7 @@ export default function LandingEditor() {
           video: section.video || { url: "", embedUrl: "" },
           ...(section.type === "categories" ? { categories: section.categories || { layout: "cards", columns: 2, tiles: [] } } : {}),
           ...(section.type === "benefits" ? { benefits: section.benefits || { items: [] } } : {}),
+          ...(section.type === "hero" ? { hero: { ...defaultHero, ...section.hero } } : {}),
         })),
       }),
     });
@@ -289,7 +377,7 @@ export default function LandingEditor() {
     }
   }
 
-  async function uploadImage(index: number, file: File) {
+  async function uploadImage(index: number, file: File, replace = false) {
     if (!draft || busy) return;
     setBusy(true);
     setError("");
@@ -300,7 +388,7 @@ export default function LandingEditor() {
       const response = await fetch("/api/admin/media", { method: "POST", body: data });
       if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo subir la imagen. Usa PNG, JPEG o WebP de hasta 8 MiB.");
       const media = (await response.json()) as LandingMedia;
-      changeSection(index, { media: [...draft.sections[index].media, media] });
+      changeSection(index, { media: replace ? [media] : [...draft.sections[index].media, media] });
       const mediaResponse = await fetch("/api/admin/media", { cache: "no-store" });
       if (mediaResponse.ok) setLibrary((await mediaResponse.json()) as LibraryMedia[]);
       setNotice("Imagen subida. Guarda el borrador para asociarla a la sección.");
@@ -343,6 +431,38 @@ export default function LandingEditor() {
       setError(failure instanceof Error ? failure.message : "No se pudo subir la imagen.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Checks the limits in the browser, uploads with progress and hands the
+  // stored video to place(), which puts it in the section or the block.
+  async function uploadVideo(key: string, file: File, altText: string, place: (media: LandingMedia) => void) {
+    if (!draft || busy) return;
+    setError(""); setNotice("");
+    if (library.filter((item) => item.kind === "video").length >= maxVideos) {
+      setError(`Ya hay ${maxVideos} videos guardados, el máximo. Elimina uno definitivamente desde la Papelera para subir otro.`);
+      return;
+    }
+    if (file.size > maxVideoBytes) {
+      setError("El video supera los 100 MB. Recórtalo o expórtalo con menor resolución.");
+      return;
+    }
+    const seconds = await videoDuration(file);
+    if (seconds > maxVideoSeconds + 0.5) {
+      setError(`El video dura ${Math.ceil(seconds)} segundos; el máximo es ${maxVideoSeconds}. Recórtalo en tu celular antes de subirlo.`);
+      return;
+    }
+    setBusy(true); setVideoProgress({ key, percent: 0 });
+    try {
+      const media = await sendVideo(file, altText, (percent) => setVideoProgress({ key, percent }));
+      place(media);
+      const mediaResponse = await fetch("/api/admin/media", { cache: "no-store" });
+      if (mediaResponse.ok) setLibrary((await mediaResponse.json()) as LibraryMedia[]);
+      setNotice("Video listo. Guarda el borrador para asociarlo a la sección.");
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "No se pudo subir el video.");
+    } finally {
+      setBusy(false); setVideoProgress(null);
     }
   }
 
@@ -400,6 +520,94 @@ export default function LandingEditor() {
     </div>;
   }
 
+  function changeHero(index: number, changes: Partial<HeroConfig>) {
+    changeSection(index, { hero: { ...defaultHero, ...draft!.sections[index].hero, ...changes } });
+  }
+
+  function heroEditor(section: DraftSection, index: number) {
+    const config = { ...defaultHero, ...section.hero };
+    const media = section.media[0];
+    const segment = (selected: boolean) => `h-10 flex-1 px-2 text-[13px] font-medium ${selected ? "bg-ink text-white" : "bg-white hover:bg-soft"}`;
+    const choices = library.filter((item) => !item.isDeleted && item.purpose !== "qr" && item.purpose !== "logo");
+    const progress = videoProgress?.key === section.key ? videoProgress.percent : null;
+    const setMedia = (item: LandingMedia | undefined) => changeSection(index, { media: item ? [item] : [] });
+    return <div className="flex flex-col gap-5 bg-soft p-4">
+      <div className={ui.label}>Diseño
+        <div aria-label="Diseño de la portada" className="grid grid-cols-2 gap-2 lg:grid-cols-4" role="radiogroup">
+          {heroVariants.map((variant) => <button aria-checked={config.variant === variant.value} key={variant.value} role="radio" type="button"
+            className={`flex flex-col gap-2 border bg-white p-2 text-left transition-colors ${config.variant === variant.value ? "border-ink shadow-[0_0_0_1px_#141414]" : "border-line hover:border-ink"}`}
+            onClick={() => changeHero(index, { variant: variant.value })}>
+            <span aria-hidden="true" className="block aspect-[16/10] overflow-hidden border border-line bg-white"><HeroSketch variant={variant.value} /></span>
+            <span className="text-[13px] font-semibold">{variant.label}</span>
+            <span className="text-xs font-normal leading-snug text-graphite">{variant.hint}</span>
+          </button>)}
+        </div>
+      </div>
+      <div className="grid gap-4 md:grid-cols-[160px_1fr]">
+        <div className="relative aspect-[4/5] w-full max-w-[200px] overflow-hidden bg-mist md:w-[160px]">
+          {media && media.url && !media.removed ? <MediaImage alt={media.altText} className="absolute inset-0 h-full w-full object-cover" height={200} sizes="160px" src={thumbnailSrc(media)} width={160} /> :
+            <span className="absolute inset-0 flex items-center justify-center p-2 text-center font-mono text-[10px] uppercase tracking-[0.08em] text-graphite">{media?.removed ? "Archivo eliminado" : "Sin imagen ni video"}</span>}
+          {media?.kind === "video" && <span className="absolute left-2 top-2 bg-ink px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-white">Video</span>}
+        </div>
+        <div className="flex min-w-0 flex-col gap-3">
+          <p className="m-0 text-sm font-semibold">{config.variant === "cover" ? "Fondo de la portada" : "Imagen o video de la portada"}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FileField accept="image/jpeg,image/png,image/webp" disabled={busy} hint="PNG, JPEG o WebP de hasta 8 MiB" label={media ? "Cambiar por una imagen" : "Subir imagen"}
+              onFile={(file) => { if (file) void uploadImage(index, file, true); }} />
+            <FileField accept="video/mp4,video/quicktime,video/webm" disabled={busy} hint={`MP4, MOV o WebM · hasta ${maxVideoSeconds} s y 100 MB`} label={media ? "Cambiar por un video" : "Subir video"}
+              onFile={(file) => { if (file) void uploadVideo(section.key, file, section.title, (item) => setMedia(item)); }} />
+          </div>
+          {progress !== null && <VideoProgress percent={progress} />}
+          <div className="flex flex-wrap items-center gap-3">
+            <select aria-label="Elegir del banco" className={`${ui.input} sm:max-w-xs`} onChange={(event) => setMedia(choices.find((item) => item.id === Number(event.target.value)))}
+              value={media && choices.some((item) => item.id === media.id) ? media.id : 0}>
+              <option value={0}>O elegir del banco…</option>
+              {choices.map((item) => <option key={item.id} value={item.id}>{mediaLabel(item)}</option>)}
+            </select>
+            {media && <button className={ui.dangerLink} onClick={() => setMedia(undefined)} type="button">Quitar</button>}
+          </div>
+          <span className={ui.hint}>Los videos se reproducen solos, en bucle y sin sonido. Videos guardados: {library.filter((item) => item.kind === "video").length} de {maxVideos}.</span>
+        </div>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className={ui.label}>Tamaño del título
+          <div aria-label="Tamaño del título" className="flex border border-ink" role="radiogroup">
+            {(["s", "m", "l", "xl"] as const).map((size) => <button aria-checked={config.titleSize === size} className={segment(config.titleSize === size)} key={size}
+              onClick={() => changeHero(index, { titleSize: size })} role="radio" type="button">{size.toUpperCase()}</button>)}
+          </div>
+        </div>
+        {(config.variant === "cover" || config.variant === "split") && <div className={ui.label}>Altura
+          <div aria-label="Altura de la portada" className="flex border border-ink" role="radiogroup">
+            {([["full", "Pantalla completa"], ["medium", "Media"]] as const).map(([value, label]) => <button aria-checked={config.height === value} className={segment(config.height === value)} key={value}
+              onClick={() => changeHero(index, { height: value })} role="radio" type="button">{label}</button>)}
+          </div>
+        </div>}
+        {config.variant === "cover" && <>
+          <label className={ui.label}><span>Opacamiento del fondo · <span className="font-mono">{config.overlay} %</span></span>
+            <input className="h-11 w-full accent-ink" max={85} min={0} onChange={(event) => changeHero(index, { overlay: Number(event.target.value) })} step={5} type="range" value={config.overlay} />
+            <span className={ui.hint}>Oscurece la imagen o el video para que el texto se lea bien; entre 40 y 60 % suele funcionar.</span>
+          </label>
+          <div className={ui.label}>Posición del texto
+            <div aria-label="Posición del texto" className="flex border border-ink" role="radiogroup">
+              {([["bottom", "Abajo"], ["center", "Centrado"]] as const).map(([value, label]) => <button aria-checked={config.textPosition === value} className={segment(config.textPosition === value)} key={value}
+                onClick={() => changeHero(index, { textPosition: value })} role="radio" type="button">{label}</button>)}
+            </div>
+          </div>
+        </>}
+      </div>
+      <label className="flex items-center gap-2.5 text-[13px] font-medium">
+        <input checked={!config.hideButtons} className="size-4 accent-ink" onChange={(event) => changeHero(index, { hideButtons: !event.target.checked })} type="checkbox" />
+        Mostrar los botones de compra
+      </label>
+      <div className="flex flex-col gap-2">
+        <span className={ui.eyebrow}>Vista rápida · a la mitad de su tamaño</span>
+        <div className="overflow-hidden border border-line bg-white" inert>
+          <div style={{ zoom: 0.5 }}><LandingHero audiences={terms.audiences} first framed section={section} title={draft!.title} /></div>
+        </div>
+      </div>
+    </div>;
+  }
+
   function categoriesEditor(section: DraftSection, index: number) {
     const config = section.categories || { layout: "cards" as const, columns: 2, tiles: [] };
     const segment = (selected: boolean) => `h-10 flex-1 px-3 text-[13px] font-medium ${selected ? "bg-ink text-white" : "bg-white hover:bg-soft"}`;
@@ -426,8 +634,9 @@ export default function LandingEditor() {
           const usedElsewhere = new Set(config.tiles.filter((_, other) => other !== tileIndex).map((other) => other.mediaId));
           return <li className="grid gap-4 border border-line bg-white p-3 sm:grid-cols-[120px_1fr]" key={tileIndex}>
             <div className="relative aspect-[4/5] w-full overflow-hidden bg-mist sm:w-[120px]">
-              {image && image.url && !image.removed ? <MediaImage alt={image.altText} className="absolute inset-0 h-full w-full object-cover" height={150} sizes="120px" src={image.url} width={120} /> :
+              {image && image.url && !image.removed ? <MediaImage alt={image.altText} className="absolute inset-0 h-full w-full object-cover" height={150} sizes="120px" src={thumbnailSrc(image)} width={120} /> :
                 <span className="absolute inset-0 flex items-center justify-center p-2 text-center font-mono text-[10px] uppercase tracking-[0.08em] text-graphite">{image?.removed ? "Imagen eliminada" : "Sin imagen"}</span>}
+              {image?.kind === "video" && <span className="absolute left-1.5 top-1.5 bg-ink px-1 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-white">Video</span>}
             </div>
             <div className="flex min-w-0 flex-col gap-3">
               <div className="flex items-center justify-between gap-2">
@@ -462,14 +671,19 @@ export default function LandingEditor() {
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <FileField accept="image/jpeg,image/png,image/webp" disabled={busy} hint="PNG, JPEG o WebP de hasta 8 MiB"
-                  label={tile.mediaId ? "Reemplazar imagen" : "Subir imagen"} onFile={(file) => { if (file) void uploadTileImage(index, tileIndex, file); }} />
-                <select aria-label="Elegir imagen del banco" className={`${ui.input} h-auto min-h-11`} onChange={(event) => changeTile(index, tileIndex, { mediaId: Number(event.target.value) })}
-                  value={tile.mediaId && library.some((item) => item.id === tile.mediaId) ? tile.mediaId : 0}>
-                  <option value={0}>{tile.mediaId ? "Quitar imagen" : "O elegir del banco…"}</option>
-                  {library.filter((item) => !item.isDeleted && item.purpose !== "qr" && item.purpose !== "logo" && (!usedElsewhere.has(item.id) || item.id === tile.mediaId)).map((item) =>
-                    <option key={item.id} value={item.id}>{item.altText || `Imagen ${item.id}`}</option>)}
-                </select>
+                  label={tile.mediaId ? "Cambiar por una imagen" : "Subir imagen"} onFile={(file) => { if (file) void uploadTileImage(index, tileIndex, file); }} />
+                <FileField accept="video/mp4,video/quicktime,video/webm" disabled={busy} hint={`Hasta ${maxVideoSeconds} s y 100 MB, sin sonido`}
+                  label={tile.mediaId ? "Cambiar por un video" : "Subir video"} onFile={(file) => {
+                    if (file) void uploadVideo(`${section.key}-${tileIndex}`, file, tile.title || section.title, (media) => changeTile(index, tileIndex, { mediaId: media.id }, [media]));
+                  }} />
               </div>
+              {videoProgress?.key === `${section.key}-${tileIndex}` && <VideoProgress percent={videoProgress.percent} />}
+              <select aria-label="Elegir imagen o video del banco" className={`${ui.input} h-auto min-h-11`} onChange={(event) => changeTile(index, tileIndex, { mediaId: Number(event.target.value) })}
+                value={tile.mediaId && library.some((item) => item.id === tile.mediaId) ? tile.mediaId : 0}>
+                <option value={0}>{tile.mediaId ? "Quitar imagen o video" : "O elegir del banco…"}</option>
+                {library.filter((item) => !item.isDeleted && item.purpose !== "qr" && item.purpose !== "logo" && (!usedElsewhere.has(item.id) || item.id === tile.mediaId)).map((item) =>
+                  <option key={item.id} value={item.id}>{mediaLabel(item)}</option>)}
+              </select>
             </div>
           </li>;
         })}
@@ -494,7 +708,7 @@ export default function LandingEditor() {
             {!section.isVisible && !section.isDeleted && <Pill tone="dashed">Oculta</Pill>}
             {section.isDeleted && <Pill tone="danger">Eliminada del borrador</Pill>}
             {section.id === 0 && <Pill tone="soft">Nueva, sin guardar</Pill>}
-            {pinned && !section.isDeleted && <Pill tone="outline">Siempre al final</Pill>}
+            {pinned && !section.isDeleted && <Pill tone="outline">{section.type === "suggestions" ? "Sobre el pie de página" : "Siempre al final"}</Pill>}
           </span>
           <span className={`truncate text-[15px] font-semibold ${section.isVisible ? "" : "text-graphite"}`}>{section.title || "Sin título"}</span>
         </button>
@@ -553,19 +767,25 @@ export default function LandingEditor() {
           Los productos de esta sección se eligen marcando «Destacado» en cada ficha. Sus precios e imágenes se leen del catálogo activo.
           <Link className="ml-1 underline" href="/admin/catalogo/productos">Abrir productos</Link>
         </p>}
+        {section.type === "hero" && heroEditor(section, index)}
+        {section.type === "suggestions" && <p className="m-0 bg-soft p-4 text-sm text-body">
+          El formulario pide nombre, celular de 8 dígitos y qué prendas le gustaría encontrar al cliente. Las respuestas llegan a
+          <Link className="ml-1 underline" href="/admin/sugerencias">Sugerencias</Link>.
+        </p>}
         {section.type === "categories" && categoriesEditor(section, index)}
         {section.type === "benefits" && benefitsEditor(section, index)}
-        {section.type !== "categories" && section.type !== "benefits" && <div className="flex flex-col gap-3">
-          <div className="flex items-baseline justify-between"><p className="m-0 text-sm font-semibold">Imágenes</p>
+        {!["categories", "benefits", "hero", "suggestions"].includes(section.type) && <div className="flex flex-col gap-3">
+          <div className="flex items-baseline justify-between"><p className="m-0 text-sm font-semibold">{section.type === "gallery" ? "Imágenes y videos" : "Imágenes"}</p>
             <span className="font-mono text-xs text-graphite">{section.media.length} / 12</span></div>
           {section.media.length > 0 && <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
             {section.media.map((image) => (
               <div className="flex flex-col gap-1.5" key={image.id}>
                 <div className="relative aspect-square overflow-hidden bg-mist">
                   {image.url && !image.removed && <MediaImage alt={image.altText} className="absolute inset-0 h-full w-full object-cover" height={160}
-                    sizes="160px" src={image.url} width={160} />}
+                    sizes="160px" src={thumbnailSrc(image)} width={160} />}
+                  {image.kind === "video" && <span className="absolute left-1.5 top-1.5 bg-ink px-1 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-white">Video</span>}
                 </div>
-                <span className="truncate text-xs" title={image.altText}>{image.altText || `Imagen ${image.id}`}</span>
+                <span className="truncate text-xs" title={image.altText}>{mediaLabel(image)}</span>
                 <button className={`${ui.dangerLink} self-start text-xs`} onClick={() => changeSection(index,
                   { media: section.media.filter((item) => item.id !== image.id) })} type="button">Quitar</button>
               </div>
@@ -580,15 +800,24 @@ export default function LandingEditor() {
               </label>
               <FileField accept="image/jpeg,image/png,image/webp" disabled={busy || section.media.length >= 12} hint="PNG, JPEG o WebP de hasta 8 MiB"
                 label="Subir imagen" onFile={(file) => { if (file) void uploadImage(index, file); }} />
+              {videoSections.includes(section.type) && <>
+                <FileField accept="video/mp4,video/quicktime,video/webm" disabled={busy || section.media.length >= 12} hint={`MP4, MOV o WebM · hasta ${maxVideoSeconds} s y 100 MB, sin sonido`}
+                  label="Subir video" onFile={(file) => {
+                    if (file) void uploadVideo(section.key, file, altTexts[section.key] || section.title, (media) => changeSection(index, { media: [...section.media, media] }));
+                  }} />
+                {videoProgress?.key === section.key && <VideoProgress percent={videoProgress.percent} />}
+                <span className={ui.hint}>Videos guardados: {library.filter((item) => item.kind === "video").length} de {maxVideos}.</span>
+              </>}
             </div>
             <div className="flex flex-col gap-3">
-              <label className={ui.label}>O elegir del banco de imágenes
+              <label className={ui.label}>O elegir del banco
                 <select className={ui.input}
                   onChange={(event) => setSelectedMedia((current) => ({ ...current, [section.key]: Number(event.target.value) }))}
                   value={selectedMedia[section.key] || 0}>
-                  <option value={0}>Selecciona una imagen</option>
-                  {library.filter((item) => !item.isDeleted && item.purpose !== "qr" && item.purpose !== "logo" && !section.media.some((used) => used.id === item.id)).map((item) =>
-                    <option key={item.id} value={item.id}>{item.altText || `Imagen ${item.id}`}</option>)}
+                  <option value={0}>{videoSections.includes(section.type) ? "Selecciona una imagen o un video" : "Selecciona una imagen"}</option>
+                  {library.filter((item) => !item.isDeleted && item.purpose !== "qr" && item.purpose !== "logo" && (item.kind !== "video" || videoSections.includes(section.type)) &&
+                    !section.media.some((used) => used.id === item.id)).map((item) =>
+                    <option key={item.id} value={item.id}>{mediaLabel(item)}</option>)}
                 </select>
               </label>
               <button className={`${ui.secondary} self-start`}
@@ -597,7 +826,7 @@ export default function LandingEditor() {
                   const item = library.find((media) => media.id === selectedMedia[section.key] && !media.isDeleted);
                   if (item) changeSection(index, { media: [...section.media, item] });
                   setSelectedMedia((current) => ({ ...current, [section.key]: 0 }));
-                }} type="button">Agregar imagen</button>
+                }} type="button">Agregar</button>
             </div>
           </div>
         </div>}
@@ -607,7 +836,8 @@ export default function LandingEditor() {
   }
 
   // Indexes into draft.sections, split by where each section is rendered.
-  const bodySections = draft.sections.flatMap((section, index) => section.type === "contact" ? [] : [index]);
+  const bodySections = draft.sections.flatMap((section, index) => pinnedTypes.includes(section.type) ? [] : [index]);
+  const suggestionSections = draft.sections.flatMap((section, index) => section.type === "suggestions" ? [index] : []);
   const contactSections = draft.sections.flatMap((section, index) => section.type === "contact" ? [index] : []);
 
   const tabs = [
@@ -677,7 +907,14 @@ export default function LandingEditor() {
 
         <section className="flex flex-col gap-3">
           <div><h2 className={ui.cardTitle}>Pie de página</h2>
-            <p className={`${ui.hint} m-0 mt-1`}>La sección de contacto se muestra siempre al final de todas las páginas de la tienda: inicio, catálogo y ficha de producto. Si la ocultas, el pie muestra el teléfono y las redes de Datos del negocio.</p></div>
+            <p className={`${ui.hint} m-0 mt-1`}>El buzón de sugerencias aparece en la página de inicio, justo encima del pie. La sección de contacto se muestra siempre al final de todas las páginas de la tienda: inicio, catálogo y ficha de producto. Si la ocultas, el pie muestra el teléfono y las redes de Datos del negocio.</p></div>
+          {suggestionSections.length === 0 ? <div className="flex flex-wrap items-center justify-between gap-3 border border-dashed border-[#bdbdbd] bg-white p-4 text-sm text-graphite">
+            Sin buzón de sugerencias: los clientes no pueden pedir prendas desde la página.
+            <button className={ui.secondary} onClick={() => addSection("suggestions")} type="button">+ Agregar buzón</button>
+          </div> : <ol className="m-0 flex list-none flex-col gap-3 p-0">
+            {suggestionSections.map((index, position) => sectionItem(draft.sections[index], index, position + 1, suggestionSections.length, true))}
+          </ol>}
+          {suggestionSections.length > 1 && <p className="m-0 text-xs text-amber-800">Solo se muestra el primer buzón visible. Elimina los demás para evitar confusiones.</p>}
           {contactSections.length === 0 ? <div className="flex flex-wrap items-center justify-between gap-3 border border-dashed border-[#bdbdbd] bg-white p-4 text-sm text-graphite">
             Sin sección de contacto: el pie usa el teléfono y las redes de Datos del negocio.
             <button className={ui.secondary} onClick={() => addSection("contact")} type="button">+ Crear contacto</button>
@@ -691,7 +928,7 @@ export default function LandingEditor() {
           <div><h2 className={ui.cardTitle}>Agregar una sección nueva</h2>
             <p className={`${ui.hint} m-0 mt-1`}>Se agrega al final de la lista y se abre para editarla. Los visitantes la verán cuando publiques.</p></div>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {sectionTypes.filter((item) => item.value !== "contact").map((item) => (
+            {sectionTypes.filter((item) => !pinnedTypes.includes(item.value)).map((item) => (
               <button className="group flex items-start gap-3 border border-line bg-soft p-4 text-left transition-colors hover:border-ink hover:bg-white" key={item.value}
                 onClick={() => addSection(item.value)} type="button">
                 <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center border border-ink text-lg leading-none transition-colors group-hover:bg-ink group-hover:text-white">+</span>
@@ -707,7 +944,7 @@ export default function LandingEditor() {
       {tab === "preview" && <div className="flex flex-col gap-3">
         <p className="m-0 text-[13px] text-graphite">Vista del borrador actual (incluye cambios sin guardar). Solo se muestran las secciones visibles y no eliminadas.</p>
         <div className="overflow-hidden border border-line bg-white">
-          <LandingSections landing={draft} products={catalogProducts} />
+          <LandingSections landing={draft} preview products={catalogProducts} />
         </div>
       </div>}
 
@@ -739,7 +976,7 @@ export default function LandingEditor() {
           </span>
         </div>
         <div className="overflow-hidden border border-line bg-white">
-          <LandingSections landing={versionPreview.landing} products={catalogProducts} />
+          <LandingSections landing={versionPreview.landing} preview products={catalogProducts} />
         </div>
       </div>}
 

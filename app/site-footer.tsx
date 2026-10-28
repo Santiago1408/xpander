@@ -2,6 +2,7 @@ import Link from "next/link";
 import FitTitle from "./fit-title";
 import type { LandingSection } from "./landing-sections";
 import MediaImage from "./media-image";
+import { siteDesigner } from "./site-credits";
 import { whatsappHref } from "./shop-format";
 import SocialLinks from "./social-links";
 
@@ -54,9 +55,14 @@ export default function SiteFooter({ contact, phone = "", socialLinks = {} }: {
               sizes="(max-width: 768px) 100vw, 25vw" src={image.url} width={800} />}
           </div>)}
         </div>}
-        <div className="mt-12 flex flex-wrap justify-between gap-3 border-t border-white/20 pt-6 font-mono text-xs text-[#bdbdbd]">
-          <span>XPANDER · Bolivia</span>
-          <Link className="hover:text-white" href="/privacidad">Privacidad</Link>
+        <div className="mt-12 flex flex-col gap-2.5 border-t border-white/20 pt-6 font-mono text-[11px] tracking-[0.02em] text-[#9a9a9a] sm:flex-row sm:items-center sm:justify-between">
+          <span className="flex flex-wrap gap-x-3 gap-y-1">
+            <span>© 2026 XPANDER · Bolivia</span>
+            <Link className="hover:text-white" href="/privacidad">Privacidad</Link>
+          </span>
+          <span>Diseño y desarrollo web · {siteDesigner.url ?
+            <a className="text-[#d6d6d6] underline-offset-4 hover:text-white hover:underline" href={siteDesigner.url} rel="noopener" target="_blank">{siteDesigner.name} ↗</a> :
+            <span className="text-[#d6d6d6]">{siteDesigner.name}</span>}</span>
         </div>
       </div>
     </footer>

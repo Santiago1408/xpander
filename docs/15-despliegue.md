@@ -81,6 +81,8 @@ docker compose up -d
 
 Las migraciones nuevas se aplican solas antes de arrancar la API.
 
+Desde la versión con videos en la landing, el bloque de XPANDER en Caddy limita las peticiones a 12 MB, salvo `/api/admin/media/videos`, que admite 110 MB. Si tu Caddy usa un bloque anterior, cópialo de nuevo desde `deploy/Caddyfile.docker` o `deploy/Caddyfile.sistema` (en Cabello, `deploy/Caddyfile`) y reconstruye o recarga Caddy; sin ese cambio, los videos de más de 12 MB fallan con el error 413.
+
 ## Respaldos manuales
 
 `deploy/backup.sh` crea `backups/AAAAMMDD-HHMMSS/` con el volcado de PostgreSQL (`database.dump`), todas las imágenes, logos, QR y comprobantes (`media.tar.gz`) y sus sumas de verificación. Hazlo antes de cada actualización y con regularidad, y copia la carpeta fuera del VPS, por ejemplo desde tu PC:

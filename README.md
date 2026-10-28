@@ -36,7 +36,9 @@ La [verificación del catálogo, la sucursal, el carrito y la papelera](docs/12-
 
 La [guía de contacto, datos del negocio y borrado de imágenes publicadas](docs/13-contacto-negocio-y-redaccion.md) explica la configuración del mapa, redes, logos y QR. El [procesamiento de imágenes](docs/17-procesamiento-imagenes.md) describe los tamaños y formatos que se generan al subir fotos.
 
-La [entrega al propietario](docs/16-entrega.md) recoge la primera configuración de la tienda y cómo comprobar que se entrega vacía.
+El [buzón de sugerencias, las variantes de portada y los videos](docs/18-buzon-portadas-videos.md) describen esas funciones de la landing y sus límites.
+
+La [entrega al propietario](docs/16-entrega.md) recoge la primera configuración de la tienda, cómo comprobar que se entrega vacía y cómo vaciar una tienda ya usada para la demostración.
 
 El [despliegue en el VPS](docs/15-despliegue.md) explica cómo publicar la tienda en `xpandertienda.duckdns.org` junto al Caddy de Cabello, y cómo hacer y restaurar respaldos.
 

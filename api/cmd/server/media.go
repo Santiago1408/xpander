@@ -27,7 +27,7 @@ const (
 	maxImagePixels = 12_000_000
 )
 
-var storageKeyPattern = regexp.MustCompile(`^[a-f0-9]{32}\.(jpg|png|webp)$`)
+var storageKeyPattern = regexp.MustCompile(`^[a-f0-9]{32}\.(jpg|png|webp|mp4)$`)
 var variantKeyPattern = regexp.MustCompile(`^[a-f0-9]{32}-(thumb|card|detail)\.webp$`)
 
 func validStoredImageKey(key, mimeType string) bool {
@@ -41,6 +41,8 @@ func validStoredImageKey(key, mimeType string) bool {
 		return mimeType == "image/png"
 	case ".webp":
 		return mimeType == "image/webp"
+	case ".mp4":
+		return mimeType == "video/mp4"
 	}
 	return false
 }
@@ -189,7 +191,7 @@ func (service *landingService) listMedia(w http.ResponseWriter, r *http.Request)
 	if _, ok := service.requireOwner(w, r, false); !ok {
 		return
 	}
-	rows, err := service.pool.Query(r.Context(), `SELECT m.id, COALESCE(m.alt_text,''),
+	rows, err := service.pool.Query(r.Context(), `SELECT m.id, m.kind, COALESCE(m.alt_text,''),
 		m.deleted_at IS NOT NULL, m.purpose,
 		COALESCE(m.file_size_bytes,0) + COALESCE((SELECT sum(v.file_size_bytes)
 			FROM media_variants v WHERE v.media_id=m.id),0),
@@ -199,7 +201,7 @@ func (service *landingService) listMedia(w http.ResponseWriter, r *http.Request)
 		+ (SELECT count(*) FROM business_profile bp WHERE bp.qr_media_id=m.id)
 		+ (SELECT count(*) FROM business_profile bp WHERE bp.logo_wordmark_media_id=m.id)
 		+ (SELECT count(*) FROM business_profile bp WHERE bp.logo_mark_media_id=m.id)
-		FROM media m WHERE m.kind='image' AND m.source_type='local'
+		FROM media m WHERE m.kind IN ('image','video') AND m.source_type='local'
 		ORDER BY m.id DESC`)
 	if err != nil {
 		serverError(w, "list media library", err)
@@ -209,13 +211,12 @@ func (service *landingService) listMedia(w http.ResponseWriter, r *http.Request)
 	items := []mediaLibraryItem{}
 	for rows.Next() {
 		var item mediaLibraryItem
-		if err := rows.Scan(&item.ID, &item.AltText, &item.IsDeleted,
+		if err := rows.Scan(&item.ID, &item.Kind, &item.AltText, &item.IsDeleted,
 			&item.Purpose, &item.Bytes, &item.UseCount); err != nil {
 			serverError(w, "scan media library", err)
 			return
 		}
 		item.URL = fmt.Sprintf("/api/admin/media/%d", item.ID)
-		item.Kind = "image"
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -241,10 +242,10 @@ func (service *landingService) changeMediaTrash(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	query := `UPDATE media SET deleted_at=now() WHERE id=$1 AND kind='image'
+	query := `UPDATE media SET deleted_at=now() WHERE id=$1 AND kind IN ('image','video')
 		AND source_type='local' AND deleted_at IS NULL RETURNING id`
 	if restore {
-		query = `UPDATE media SET deleted_at=NULL WHERE id=$1 AND kind='image'
+		query = `UPDATE media SET deleted_at=NULL WHERE id=$1 AND kind IN ('image','video')
 			AND source_type='local' AND deleted_at IS NOT NULL RETURNING id`
 	}
 	if !restore {
@@ -293,7 +294,7 @@ func (service *landingService) serveStoredMedia(w http.ResponseWriter, r *http.R
 	var key, mimeType string
 	query := `SELECT COALESCE(v.storage_key,m.storage_key), COALESCE(v.mime_type,m.mime_type)
 		FROM media m LEFT JOIN media_variants v ON v.media_id=m.id AND v.size_key=$2
-		WHERE m.id=$1 AND m.source_type='local' AND m.kind='image'`
+		WHERE m.id=$1 AND m.source_type='local' AND m.kind IN ('image','video')`
 	if !admin {
 		query += ` AND (
 			EXISTS (SELECT 1 FROM page_publication_media WHERE media_id=$1)

@@ -7,7 +7,7 @@ import { fetchBusiness, fetchCatalog, fetchLanding } from "../store-data";
 
 export const metadata: Metadata = {
   title: "Privacidad | XPANDER",
-  description: "Qué datos pide XPANDER al registrar un pedido, para qué los usa y cómo pedir que se eliminen.",
+  description: "Qué datos pide XPANDER al registrar un pedido o una sugerencia, para qué los usa y cómo pedir que se eliminen.",
 };
 
 // Base text for the owner to review; it describes what the system actually stores.
@@ -15,15 +15,18 @@ const sections: { title: string; paragraphs: string[] }[] = [
   { title: "Qué datos pedimos", paragraphs: [
     "Al registrar un pedido pedimos tu nombre, tu número de celular o WhatsApp y, si quieres, indicaciones para la entrega. Si pagas por QR, también guardamos la imagen del comprobante que subes.",
     "La dirección y el costo de un envío a domicilio se coordinan por WhatsApp y no se guardan en el sitio.",
+    "Si dejas una sugerencia en el buzón de la página de inicio, guardamos tu nombre, tu celular y tu mensaje.",
   ] },
   { title: "Para qué los usamos", paragraphs: [
     "Solo para preparar y entregar tu pedido: confirmar el pago, separar las prendas en la sucursal y comunicarnos contigo por WhatsApp o llamada. No vendemos ni compartimos tus datos con terceros ni los usamos para publicidad.",
+    "Las sugerencias nos ayudan a elegir qué prendas traer; usamos tu celular solo para avisarte si conseguimos lo que pediste.",
   ] },
   { title: "Quién puede verlos", paragraphs: [
     "Únicamente el personal de la tienda desde el panel de administración, protegido con usuario y contraseña. Los comprobantes de pago no son públicos.",
   ] },
   { title: "Cuánto tiempo los guardamos", paragraphs: [
     "Conservamos los pedidos como registro de ventas de la tienda. Puedes pedir en cualquier momento que eliminemos tus datos de contacto y tus comprobantes, salvo lo que debamos conservar por obligaciones legales o contables.",
+    "Las sugerencias se guardan mientras nos sirvan para planificar compras y puedes pedir que las borremos cuando quieras.",
   ] },
   { title: "Datos en tu dispositivo", paragraphs: [
     "El carrito y la preferencia de tema claro u oscuro se guardan solo en tu navegador. El sitio no usa cookies de publicidad ni de seguimiento; la única cookie es la de inicio de sesión del panel de administración.",

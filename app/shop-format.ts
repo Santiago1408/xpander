@@ -109,6 +109,16 @@ export function productInStock(product: CatalogProduct): boolean {
   return product.variants.some((variant) => variantInStock(variant));
 }
 
+// Customers are in Bolivia, so phone fields take the 8 digits alone and drop a
+// pasted +591 country code.
+export function mobileDigits(value: string): string {
+  let digits = value.replace(/\D/g, "");
+  if (digits.length > 8 && digits.startsWith("591")) digits = digits.slice(3);
+  return digits.slice(0, 8);
+}
+
+export const mobilePattern = "[67][0-9]{7}";
+
 // wa.me link for a phone; 8-digit Bolivian mobile numbers get the 591 country code.
 export function whatsappHref(phone: string | undefined): string | null {
   const digits = (phone || "").replace(/\D/g, "");

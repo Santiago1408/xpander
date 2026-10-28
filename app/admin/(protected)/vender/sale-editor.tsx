@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import MediaImage from "../../../media-image";
+import { mobileDigits } from "../../../shop-format";
 import { notify } from "../../../toast";
 import { ConfirmDialog, EmptyState, Feedback, formatBOB, ui } from "../../admin-ui";
 
@@ -210,7 +211,7 @@ export default function SaleEditor() {
               <span className="underline underline-offset-4">Cliente y nota</span> <span className="font-normal text-graphite">(opcional)</span></summary>
             <div className="mt-3 flex flex-col gap-3">
               <label className={ui.label}>Nombre<input className={ui.input} maxLength={120} onChange={(event) => setCustomerName(event.target.value)} placeholder="Cliente en tienda" value={customerName} /></label>
-              <label className={ui.label}>Celular<input className={ui.input} inputMode="tel" maxLength={25} onChange={(event) => setCustomerPhone(event.target.value)} value={customerPhone} /></label>
+              <label className={ui.label}>Celular<input className={`${ui.input} font-mono`} inputMode="numeric" onChange={(event) => setCustomerPhone(mobileDigits(event.target.value))} placeholder="71234567" type="tel" value={customerPhone} /></label>
               <label className={ui.label}>Nota<textarea className={ui.textarea} maxLength={500} onChange={(event) => setNote(event.target.value)} rows={2} value={note} /></label>
             </div>
           </details>

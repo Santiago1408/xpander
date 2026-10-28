@@ -8,7 +8,7 @@ import { ChipRow, EmptyState, FileField, Feedback, PageHeader, Pill, formatBOB, 
 import { identifierFromName } from "../../../identifier";
 import TrashActions, { type TrashRef } from "../../papelera/trash-actions";
 
-type Media = { id: number; url: string; altText: string; isDeleted?: boolean; purpose?: "photo" | "qr" | "logo" };
+type Media = { id: number; kind?: "image" | "video"; url: string; altText: string; isDeleted?: boolean; purpose?: "photo" | "qr" | "logo" };
 type Branch = { id: number; name: string };
 type Stock = { branchId: number; variantId: number; quantity: number };
 type Inventory = { branches: Branch[]; stock: Stock[] };
@@ -337,7 +337,8 @@ export default function QuickProductEditor() {
 
   function productForm() {
     const current = draft!;
-    const libraryChoices = library.filter((item) => !item.isDeleted && item.purpose !== "qr" && item.purpose !== "logo" && !current.media.some((used) => used.id === item.id));
+    // Landing videos stay out of product photos.
+    const libraryChoices = library.filter((item) => !item.isDeleted && item.kind !== "video" && item.purpose !== "qr" && item.purpose !== "logo" && !current.media.some((used) => used.id === item.id));
     return <>
       <div className="flex flex-col gap-3">
         <button className="self-start text-sm font-medium text-graphite hover:text-ink" disabled={busy}

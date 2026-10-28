@@ -49,8 +49,9 @@ function QRAlert({ qr }: { qr: QRState | null }) {
 
 export const adminSections = [
   { href: "/admin", label: "Resumen" },
-  { href: "/admin/pedidos", label: "Pedidos", badge: true },
+  { href: "/admin/pedidos", label: "Pedidos", badge: "orders" },
   { href: "/admin/vender", label: "Vender en tienda" },
+  { href: "/admin/sugerencias", label: "Sugerencias", badge: "suggestions" },
   { href: "/admin/catalogo/productos", label: "Productos" },
   { href: "/admin/inventario", label: "Inventario" },
   { href: "/admin/catalogo/valores", label: "Marcas, estilos y público" },
@@ -87,19 +88,25 @@ export default function AdminShell({ user, children }: { user: AdminUser; childr
   const pathname = usePathname();
   const router = useRouter();
   const [pending, setPending] = useState(0);
+  const [suggestions, setSuggestions] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [qr, setQR] = useState<QRState | null>(null);
   const role = user.role === "owner" ? "Propietario" : "Personal";
 
-  // Pending orders badge; it refreshes whenever the owner changes section.
+  // Pending orders and suggestions badges; they refresh whenever the owner changes section.
   useEffect(() => {
     let cancelled = false;
     void fetch("/api/admin/orders", { cache: "no-store" }).then(async (response) => {
       if (!response.ok || cancelled) return;
       const orders = (await response.json()) as { status: string }[];
       if (!cancelled) setPending(orders.filter((order) => order.status === "pending").length);
+    }).catch(() => undefined);
+    void fetch("/api/admin/suggestions", { cache: "no-store" }).then(async (response) => {
+      if (!response.ok || cancelled) return;
+      const items = (await response.json()) as { status: string }[];
+      if (!cancelled) setSuggestions(items.filter((item) => item.status === "pending").length);
     }).catch(() => undefined);
     void readQRState().then((state) => { if (!cancelled) setQR(state); }).catch(() => undefined);
     return () => { cancelled = true; };
@@ -131,7 +138,8 @@ export default function AdminShell({ user, children }: { user: AdminUser; childr
         className={`flex min-h-11 items-center gap-3 px-3 text-sm text-white transition-colors ${active ? "bg-[#333] font-semibold" : "hover:bg-white/5"}`}>
         <span className="inline-flex w-5 justify-center font-mono text-[11px] opacity-60">{String(index + 1).padStart(2, "0")}</span>
         <span className="flex-1">{section.label}</span>
-        {section.badge && pending > 0 && <span className="rounded-full bg-white px-2 py-0.5 font-mono text-[11px] text-ink">{pending}</span>}
+        {section.badge && (section.badge === "orders" ? pending : suggestions) > 0 &&
+          <span className="rounded-full bg-white px-2 py-0.5 font-mono text-[11px] text-ink">{section.badge === "orders" ? pending : suggestions}</span>}
       </Link>;
     })}
   </nav>;

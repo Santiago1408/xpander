@@ -5,8 +5,17 @@ import { useEffect, useState, type FormEvent } from "react";
 import TrashActions, { type TrashRef } from "../papelera/trash-actions";
 import { ChipRow, EmptyState, FileField, Feedback, Pill, ui } from "../../admin-ui";
 
-type MediaItem = { id: number; url: string; altText: string; isDeleted: boolean;
+type MediaItem = { id: number; kind: "image" | "video"; url: string; altText: string; isDeleted: boolean;
   useCount: number; purpose: "photo" | "qr" | "logo"; bytes: number };
+
+// Videos are stored with the "photo" purpose; the filters tell them apart by kind.
+function inView(item: MediaItem, view: string) {
+  if (view === "trash") return item.isDeleted;
+  if (item.isDeleted) return false;
+  if (view === "video") return item.kind === "video";
+  if (view === "photo") return item.purpose === "photo" && item.kind !== "video";
+  return view === "all" || item.purpose === view;
+}
 
 type Usage = { usedBytes: number; quotaBytes: number };
 
@@ -110,8 +119,8 @@ export default function MediaLibrary() {
         { method: item.isDeleted ? "POST" : "DELETE" });
       if (!response.ok) throw new Error((await response.text()).trim() || "No se pudo cambiar la papelera.");
       await refresh();
-      setTrashed(item.isDeleted ? null : { kind: "media", id: item.id, label: item.altText || `Imagen ${item.id}` });
-      setNotice(item.isDeleted ? "Imagen restaurada." : "");
+      setTrashed(item.isDeleted ? null : { kind: "media", id: item.id, label: item.altText || `${item.kind === "video" ? "Video" : "Imagen"} ${item.id}` });
+      setNotice(item.isDeleted ? `${item.kind === "video" ? "Video restaurado" : "Imagen restaurada"}.` : "");
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "No se pudo completar la acción.");
     } finally {
@@ -119,8 +128,7 @@ export default function MediaLibrary() {
     }
   }
 
-  const visible = (items || []).filter((item) => view === "trash" ? item.isDeleted :
-    !item.isDeleted && (view === "all" || item.purpose === view));
+  const visible = (items || []).filter((item) => inView(item, view));
   const totalBytes = (items || []).reduce((sum, item) => sum + item.bytes, 0);
 
   return (
@@ -142,9 +150,9 @@ export default function MediaLibrary() {
       {trashed && <TrashActions item={trashed} notice onChanged={() => window.location.reload()} />}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ChipRow label="Filtrar imágenes">
-          {[["all", "Activas"], ["photo", "Fotografías"], ["qr", "Códigos QR"], ["logo", "Logos"], ["trash", "En papelera"]].map(([value, label]) =>
+          {[["all", "Activas"], ["photo", "Fotografías"], ["video", "Videos"], ["qr", "Códigos QR"], ["logo", "Logos"], ["trash", "En papelera"]].map(([value, label]) =>
             <button aria-pressed={view === value} className={`${ui.chip(view === value)} shrink-0`} key={value} onClick={() => setView(value)} type="button">{label}
-              <span className="font-mono text-[11px] opacity-70">{(items || []).filter((item) => value === "trash" ? item.isDeleted : !item.isDeleted && (value === "all" || item.purpose === value)).length}</span></button>)}
+              <span className="font-mono text-[11px] opacity-70">{(items || []).filter((item) => inView(item, value)).length}</span></button>)}
         </ChipRow>
         <span className="font-mono text-xs text-graphite">{items?.length ?? 0} archivos · {formatBytes(totalBytes)}</span>
       </div>
@@ -153,11 +161,11 @@ export default function MediaLibrary() {
           {visible.map((item) => <article className={`flex flex-col bg-white ${item.isDeleted ? "opacity-70" : ""}`} key={item.id}>
             <div className={`relative aspect-[4/5] overflow-hidden ${item.purpose === "qr" || item.purpose === "logo" ? "bg-white" : "bg-mist"}`}>
               <MediaImage alt={item.altText} className={`absolute inset-0 h-full w-full ${item.purpose === "qr" || item.purpose === "logo" ? "object-contain p-4" : "object-cover"}`}
-                height={500} sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 20vw" src={item.url} width={400} />
-              <span className="absolute left-2 top-2 bg-white px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em]">{item.purpose === "qr" ? "QR" : item.purpose === "logo" ? "Logo" : "Foto"}</span>
+                height={500} sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 20vw" src={item.kind === "video" ? `${item.url}?size=card` : item.url} width={400} />
+              <span className={`absolute left-2 top-2 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] ${item.kind === "video" ? "bg-ink text-white" : "bg-white"}`}>{item.kind === "video" ? "Video" : item.purpose === "qr" ? "QR" : item.purpose === "logo" ? "Logo" : "Foto"}</span>
             </div>
             <div className="flex flex-1 flex-col gap-1.5 p-3">
-              <p className="m-0 truncate text-sm font-medium" title={item.altText}>{item.altText || `Imagen ${item.id}`}</p>
+              <p className="m-0 truncate text-sm font-medium" title={item.altText}>{item.altText || `${item.kind === "video" ? "Video" : "Imagen"} ${item.id}`}</p>
               <p className="m-0 font-mono text-[11px] text-graphite">{formatBytes(item.bytes)} · {item.useCount} uso(s)</p>
               {item.isDeleted && <Pill tone="danger">En papelera</Pill>}
               <button className={`${item.isDeleted ? ui.link : ui.dangerLink} mt-auto self-start pt-1`} disabled={busy}

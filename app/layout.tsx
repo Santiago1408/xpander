@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import Script from "next/script";
 import "./globals.css";
 import Toaster from "./toast";
+import { siteDesigner } from "./site-credits";
 import { siteUrl } from "./site-url";
 
 // Fonts are bundled (latin subset, SIL OFL; licenses in app/fonts) so the site
@@ -27,6 +28,8 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "XPANDER",
   description: "Tienda de ropa XPANDER",
+  authors: [{ name: siteDesigner.name, url: siteDesigner.url || undefined }],
+  creator: siteDesigner.name,
   openGraph: {
     siteName: "XPANDER", locale: "es_BO", type: "website",
     images: [{ url: "/imagen-compartir", width: 1200, height: 630, alt: "XPANDER" }],

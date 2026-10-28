@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChipRow, ConfirmDialog, EmptyState, Feedback, MobileSheet, Pill, formatBOB, formatDate, ui } from "../../admin-ui";
 import { deliveryLabel, orderState, paymentMethodLabel, type AdminOrder as Order } from "../dashboard";
+import { whatsappHref } from "../../../shop-format";
 
 const paymentLabel: Record<Order["paymentStatus"], string> = {
   awaiting_receipt: "Sin comprobante", submitted: "Comprobante pendiente de revisión",
@@ -143,7 +144,7 @@ export default function OrdersEditor() {
         <div><dt className={ui.eyebrow}>Cliente</dt><dd className="m-0 mt-1">{order.customerName}</dd>
           {/\d/.test(order.customerPhone) && <dd className="m-0 mt-0.5 flex flex-wrap gap-x-3 font-mono text-[13px]">
             <a className="underline-offset-4 hover:underline" href={`tel:${order.customerPhone.replace(/[^+\d]/g, "")}`}>{order.customerPhone}</a>
-            <a className="text-graphite underline-offset-4 hover:underline" href={`https://wa.me/${order.customerPhone.replace(/\D/g, "")}`} rel="noopener noreferrer" target="_blank">WhatsApp ↗</a>
+            {whatsappHref(order.customerPhone) && <a className="text-graphite underline-offset-4 hover:underline" href={whatsappHref(order.customerPhone)!} rel="noopener noreferrer" target="_blank">WhatsApp ↗</a>}
           </dd>}</div>
         <div><dt className={ui.eyebrow}>Entrega</dt>
           {order.channel === "store" ? <dd className="m-0 mt-1">Venta en mostrador · {order.pickupBranchName}</dd> : order.deliveryMethod === "delivery" ? <>

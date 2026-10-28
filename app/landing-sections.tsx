@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import MediaImage from "./media-image";
+import MediaVideo from "./media-video";
+import SuggestionBox from "./suggestion-box";
 import ProductCard, { BrandPlaceholder } from "./product-card";
 import type { CatalogProduct } from "./catalogo/catalog-shop";
 import SiteFooter, { footerContact } from "./site-footer";
@@ -26,6 +28,7 @@ export type LandingSection = {
   video?: { url?: string; embedUrl?: string };
   categories?: CategoriesConfig;
   benefits?: BenefitsConfig;
+  hero?: HeroConfig;
   isVisible?: boolean;
   isDeleted?: boolean;
 };
@@ -39,6 +42,18 @@ export const defaultBenefits: BenefitItem[] = [
   { icon: "qr", title: "Pago por QR", text: "Paga desde la app de tu banco y adjunta tu comprobante." },
   { icon: "chat", title: "Confirmación por WhatsApp", text: "Envías el detalle por WhatsApp y el negocio confirma tu pedido." },
 ];
+
+// Layout of a cover (hero) section, chosen in the landing editor.
+export type HeroConfig = {
+  variant: "classic" | "cover" | "split" | "centered";
+  titleSize: "s" | "m" | "l" | "xl";
+  overlay: number;
+  textPosition: "bottom" | "center";
+  height: "full" | "medium";
+  hideButtons: boolean;
+};
+
+export const defaultHero: HeroConfig = { variant: "classic", titleSize: "l", overlay: 45, textPosition: "bottom", height: "full", hideButtons: false };
 
 export type CategoryTile = { mediaId: number; title: string; linkKind: "" | "style" | "audience" | "brand"; linkValue: string };
 export type CategoriesConfig = { layout: "cards" | "panels"; columns: number; tiles: CategoryTile[] };
@@ -58,7 +73,7 @@ const heading = "xp-display m-0 text-[clamp(32px,4vw,56px)] leading-none trackin
 
 // Fills the aspect box of its parent; removed images keep a visible marker.
 function Picture({ image, sizes, tone = "mist", eager = false }: {
-  image?: Pick<LandingMedia, "url" | "altText" | "removed">; sizes: string; tone?: "mist" | "band"; eager?: boolean;
+  image?: Pick<LandingMedia, "url" | "altText" | "removed"> & { kind?: string }; sizes: string; tone?: "mist" | "band"; eager?: boolean;
 }) {
   if (!image) return <BrandPlaceholder />;
   if (image.removed || !image.url) {
@@ -66,6 +81,7 @@ function Picture({ image, sizes, tone = "mist", eager = false }: {
       Imagen eliminada
     </div>;
   }
+  if (image.kind === "video") return <MediaVideo className="absolute inset-0 h-full w-full object-cover" eager={eager} label={image.altText} src={image.url} />;
   return <MediaImage alt={image.altText} className="absolute inset-0 h-full w-full object-cover" height={1200}
     loading={eager ? "eager" : "lazy"} sizes={sizes} src={image.url} width={960} />;
 }
@@ -83,28 +99,106 @@ function CtaLink({ href, children, variant = "dark" }: { href: string; children:
   return <Link className={`xp-btn ${styles}`} href={href}>{children}</Link>;
 }
 
-function Hero({ section, title, audiences, first }: { section: LandingSection; title: string; audiences: string[]; first: boolean }) {
+const heroTitleSizes: Record<HeroConfig["titleSize"], string> = {
+  s: "text-[clamp(36px,5.6vw,80px)]",
+  m: "text-[clamp(44px,7vw,108px)]",
+  l: "text-[clamp(52px,8.4vw,136px)]",
+  xl: "text-[clamp(56px,10vw,168px)]",
+};
+
+// The two calls to action of the cover: the first audiences, or the catalog.
+function HeroButtons({ audiences, light = false, center = false }: { audiences: string[]; light?: boolean; center?: boolean }) {
+  const solid = light ? "bg-white text-ink hover:bg-white/85" : "bg-band-cta-bg text-band-cta-fg hover:opacity-85";
+  const ghost = light ? "border border-white text-white hover:bg-white hover:text-ink" : "border border-band-fg text-band-fg hover:bg-band-fg hover:text-band";
+  const link = (href: string, style: string, children: ReactNode) => <Link className={`xp-btn ${style}`} href={href}>{children}</Link>;
+  return <div className={`grid grid-cols-2 gap-3 sm:flex sm:flex-wrap ${center ? "sm:justify-center" : ""}`}>
+    {audiences.length > 0 ? <>
+      {link(audienceHref(audiences[0]), solid, <><span className="hidden sm:inline">Comprar&nbsp;</span>{titleCase(audiences[0])}</>)}
+      {link(audiences[1] ? audienceHref(audiences[1]) : "/catalogo", ghost,
+        audiences[1] ? <><span className="hidden sm:inline">Comprar&nbsp;</span>{titleCase(audiences[1])}</> : "Ver catálogo")}
+    </> : link("/catalogo", `${solid} col-span-2 sm:col-span-1`, "Ver catálogo")}
+  </div>;
+}
+
+// framed: drawn inside the editor's quick preview, where heights cannot follow the screen.
+export function LandingHero({ section, title, audiences, first, framed = false }: {
+  section: LandingSection; title: string; audiences: string[]; first: boolean; framed?: boolean;
+}) {
   const Title = first ? "h1" : "h2";
+  const config = { ...defaultHero, ...section.hero };
+  const media = section.media[0];
+  const titleClass = `xp-display m-0 ${heroTitleSizes[config.titleSize] ?? heroTitleSizes.l} leading-[0.9] tracking-[-0.02em] [overflow-wrap:anywhere]`;
+  const heading = <Title className={titleClass}>{section.title || title}</Title>;
+  const gap = first ? "" : bandGap;
+
+  if (config.variant === "cover") {
+    const center = config.textPosition === "center";
+    const height = framed ? (config.height === "medium" ? "min-h-[560px]" : "min-h-[820px]") :
+      config.height === "medium" ? "min-h-[64svh] md:min-h-[70svh]" : "min-h-[calc(100svh-64px)] md:min-h-[calc(100svh-76px)]";
+    return (
+      <section className={`relative isolate overflow-hidden bg-ink text-white ${gap}`} id={section.key}>
+        {media && <div className="absolute inset-0 -z-20"><Picture eager={first} image={media} sizes="100vw" tone="band" /></div>}
+        <div aria-hidden="true" className="absolute inset-0 -z-10 bg-black" style={{ opacity: Math.min(85, Math.max(0, config.overlay)) / 100 }} />
+        {!center && <div aria-hidden="true" className="absolute inset-x-0 bottom-0 -z-10 h-2/3 bg-gradient-to-t from-black/45 to-transparent" />}
+        <div className={`xp-container flex ${height} flex-col gap-7 py-[clamp(40px,6vw,88px)] ${center ? "items-center justify-center text-center" : "justify-end"}`}>
+          <div className="xp-label text-white/75">XPANDER · Bolivia</div>
+          {heading}
+          <Body className={`max-w-[480px] text-lg leading-[1.55] text-white/85 ${center ? "mx-auto" : ""}`} text={section.body} />
+          {!config.hideButtons && <HeroButtons audiences={audiences} center={center} light />}
+        </div>
+      </section>
+    );
+  }
+
+  if (config.variant === "split") {
+    const height = framed ? (config.height === "medium" ? "lg:min-h-[560px]" : "lg:min-h-[820px]") :
+      config.height === "medium" ? "lg:min-h-[70svh]" : "lg:min-h-[calc(100svh-76px)]";
+    return (
+      <section className={`grid bg-band text-band-fg lg:grid-cols-2 ${gap}`} id={section.key}>
+        <div className={`relative aspect-[4/5] overflow-hidden bg-band-media sm:aspect-[4/3] lg:order-2 lg:aspect-auto ${height}`}>
+          <Picture eager={first} image={media} sizes="(max-width: 1024px) 100vw, 50vw" tone="band" />
+        </div>
+        <div className="flex flex-col justify-between gap-12 px-[clamp(16px,4vw,48px)] py-10 lg:py-[clamp(48px,6vw,96px)] lg:pl-[max(clamp(16px,4vw,48px),calc((100vw-1440px)/2+48px))]">
+          <div className="xp-label text-band-muted">XPANDER · Bolivia</div>
+          <div className="flex flex-col gap-8">
+            {heading}
+            <Body className="max-w-[440px] text-lg leading-[1.55] text-band-body" text={section.body} />
+            {!config.hideButtons && <HeroButtons audiences={audiences} />}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (config.variant === "centered") {
+    return (
+      <section className={`bg-band text-band-fg ${gap}`} id={section.key}>
+        <div className="xp-container flex flex-col items-center gap-7 pt-[clamp(48px,7vw,112px)] text-center">
+          <div className="xp-label text-band-muted">XPANDER · Bolivia</div>
+          {heading}
+          <Body className="mx-auto max-w-[520px] text-lg leading-[1.55] text-band-body" text={section.body} />
+          {!config.hideButtons && <HeroButtons audiences={audiences} center />}
+        </div>
+        <div className="xp-container pb-[clamp(16px,4vw,48px)] pt-[clamp(40px,5vw,72px)]">
+          <div className="relative aspect-[4/5] overflow-hidden bg-band-media sm:aspect-[16/9] lg:aspect-[21/9]">
+            <Picture eager={first} image={media} sizes="100vw" tone="band" />
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <section className={`bg-band text-band-fg ${first ? "" : bandGap}`} id={section.key}>
+    <section className={`bg-band text-band-fg ${gap}`} id={section.key}>
       <div className="xp-container grid items-end gap-[clamp(32px,5vw,72px)] py-[clamp(40px,6vw,80px)] lg:grid-cols-2">
         <div className="flex flex-col gap-8 pb-2">
           <div className="xp-label text-band-muted">XPANDER · Bolivia</div>
-          <Title className="xp-display m-0 text-[clamp(52px,8.4vw,136px)] leading-[0.9] tracking-[-0.02em] [overflow-wrap:anywhere]">
-            {section.title || title}
-          </Title>
+          {heading}
           <Body className="max-w-[440px] text-lg leading-[1.55] text-band-body" text={section.body} />
-          <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
-            {audiences.length > 0 ? <>
-              <CtaLink href={audienceHref(audiences[0])} variant="band"><span className="hidden sm:inline">Comprar&nbsp;</span>{titleCase(audiences[0])}</CtaLink>
-              <CtaLink href={audiences[1] ? audienceHref(audiences[1]) : "/catalogo"} variant="band-ghost">
-                {audiences[1] ? <><span className="hidden sm:inline">Comprar&nbsp;</span>{titleCase(audiences[1])}</> : "Ver catálogo"}
-              </CtaLink>
-            </> : <CtaLink href="/catalogo" variant="band">Ver catálogo</CtaLink>}
-          </div>
+          {!config.hideButtons && <HeroButtons audiences={audiences} />}
         </div>
         <div className="relative -order-1 aspect-[4/5] overflow-hidden bg-band-media lg:order-none">
-          <Picture eager={first} image={section.media[0]} sizes="(max-width: 1024px) 100vw, 50vw" tone="band" />
+          <Picture eager={first} image={media} sizes="(max-width: 1024px) 100vw, 50vw" tone="band" />
         </div>
       </div>
     </section>
@@ -311,15 +405,17 @@ function Benefits({ items, section }: { items: BenefitItem[]; section?: LandingS
   );
 }
 
-export default function LandingSections({ landing, products = [], business }: {
-  landing: PublishedLanding; products?: CatalogProduct[]; business?: PublicBusiness;
+export default function LandingSections({ landing, products = [], business, preview = false }: {
+  landing: PublishedLanding; products?: CatalogProduct[]; business?: PublicBusiness; preview?: boolean;
 }) {
   const visible = landing.sections.filter(
     (section) => section.isVisible !== false && section.isDeleted !== true,
   );
   // The contact section is always rendered last, as the page footer.
   const contactSection = footerContact(visible);
-  const sections = visible.filter((section) => section.type !== "contact");
+  // The suggestion box is pinned too, just above the footer.
+  const suggestionsSection = visible.find((section) => section.type === "suggestions");
+  const sections = visible.filter((section) => section.type !== "contact" && section.type !== "suggestions");
   const featuredProducts = products.filter((product) => product.isFeatured && product.variants.length > 0);
   const { audiences, styles } = catalogTerms(products);
   const nav = catalogNav(products);
@@ -336,7 +432,7 @@ export default function LandingSections({ landing, products = [], business }: {
   return (
     <>
       <SiteHeader nav={nav} />
-      {sections.length === 0 && !contactSection && (
+      {sections.length === 0 && !contactSection && !suggestionsSection && (
         <section className="bg-band text-band-fg">
           <div className="xp-container py-28">
             <h1 className="xp-display m-0 text-[clamp(52px,8vw,128px)] leading-[0.9]">{landing.title}</h1>
@@ -345,7 +441,7 @@ export default function LandingSections({ landing, products = [], business }: {
       )}
       {sections.map((section, index) => {
         let block: ReactNode;
-        if (section.type === "hero") block = <Hero audiences={audiences} first={heroCount++ === 0} section={section} title={landing.title} />;
+        if (section.type === "hero") block = <LandingHero audiences={audiences} first={heroCount++ === 0} section={section} title={landing.title} />;
         else if (section.type === "featured") block = <Featured products={featuredProducts} section={section} />;
         else if (section.type === "gallery") block = <Gallery section={section} />;
         else if (section.type === "video") block = <Video section={section} />;
@@ -362,6 +458,7 @@ export default function LandingSections({ landing, products = [], business }: {
       })}
       {hasBenefits ? <div className="pb-[clamp(56px,7vw,112px)]" /> : <Benefits items={defaultBenefits.map((item) => item.icon === "qr" && !business?.qrUrl && business ?
         { ...item, text: "El pago en línea no está disponible por el momento." } : item)} />}
+      {suggestionsSection && <SuggestionBox body={suggestionsSection.body} id={suggestionsSection.key} preview={preview} title={suggestionsSection.title} />}
       <SiteFooter contact={contactSection} phone={business?.phone} socialLinks={business?.socialLinks} />
     </>
   );

@@ -1,5 +1,7 @@
 # Procesamiento de imágenes
 
+Los videos de la landing se procesan aparte, con ffmpeg; ver [buzón, portadas y videos](18-buzon-portadas-videos.md).
+
 La migración `021_image_derivatives.sql` añade el propósito de cada imagen y registra sus versiones de tamaño. Las imágenes JPEG, PNG y WebP nuevas se procesan al subirlas desde el banco de medios, el producto o la landing. La API acepta archivos de hasta 8 MiB y 12 millones de píxeles, y rechaza imágenes animadas.
 
 Las fotos se guardan como WebP: un archivo principal con lado máximo de 1920 píxeles y, cuando la fuente es mayor que cada límite, versiones `thumb` (320), `card` (800) y `detail` (1200). No se conserva el original grande. El navegador elige la versión según el espacio disponible usando `srcset` y `sizes`. Las fotos que existían antes de la migración siguen sirviéndose en JPEG o PNG; sus URL con `?size=` devuelven el archivo anterior hasta que se vuelvan a cargar.

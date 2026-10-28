@@ -126,6 +126,7 @@ func buildAPI(pool *pgxpool.Pool, publicOrigin string, secureCookies bool, media
 	registerTrashRoutes(mux, pool, admin, mediaDir)
 	registerInventoryRoutes(mux, pool, admin)
 	registerOrderRoutes(mux, pool, admin, whatsAppNumber, mediaDir)
+	registerSuggestionRoutes(mux, pool, admin)
 	return mux
 }
 

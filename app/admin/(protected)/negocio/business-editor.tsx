@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useState, type FormEvent } from "react";
+import { mobileDigits } from "../../../shop-format";
 import { socialPlatforms } from "../../../social-platforms";
 import { FileField, Feedback, Pill, ui } from "../../admin-ui";
 
@@ -118,8 +119,9 @@ export default function BusinessEditor() {
           <p className={`${ui.hint} mt-1`}>El teléfono se muestra en el pie de la tienda. El número que recibe los pedidos por WhatsApp se configura en el servidor y no cambia aquí.</p>
         </div>
         <label className={`${ui.label} max-w-sm`}>Teléfono *
-          <input className={`${ui.input} font-mono`} maxLength={40} required type="tel"
-            onChange={(event) => setProfile({ ...profile, phone: event.target.value })} value={profile.phone} />
+          <input className={`${ui.input} font-mono`} inputMode="numeric" minLength={7} pattern="[0-9]{7,8}" placeholder="71234567" required
+            title="7 u 8 dígitos, sin el código de país" type="tel"
+            onChange={(event) => setProfile({ ...profile, phone: mobileDigits(event.target.value) })} value={profile.phone} />
         </label>
         <div className="border-t border-line pt-5">
           <h3 className="m-0 text-sm font-semibold">Redes sociales del negocio</h3>
