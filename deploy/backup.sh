@@ -19,4 +19,9 @@ echo "Respaldando imágenes y comprobantes…"
 docker compose run --rm --no-deps -T --entrypoint tar xpander-api -C /srv/media -czf - . > "$target/media.tar.gz"
 
 (cd "$target" && sha256sum database.dump media.tar.gz > SHA256SUMS)
+# Run with sudo, the files would belong to root; hand them to the user who ran
+# it so the folder can be copied off the server with scp.
+if [ -n "${SUDO_USER:-}" ]; then
+  chown -R "$SUDO_USER": backups
+fi
 echo "Respaldo listo en $target ($(du -sh "$target" | cut -f1))."
